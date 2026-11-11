@@ -1,0 +1,1 @@
+{"findings": [{"location": "GET /users > response 200.timezone", "rule": "R17", "severity": "SAFE"}, {"location": "POST /users > request body.nickname", "rule": "R17", "severity": "SAFE"}], "profile": "server"}
