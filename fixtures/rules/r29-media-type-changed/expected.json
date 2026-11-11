@@ -1,0 +1,54 @@
+{
+  "positive": {
+    "server": [
+      {
+        "rule": "R29",
+        "severity": "BREAKING",
+        "location": "GET /items > response 200"
+      },
+      {
+        "rule": "R29",
+        "severity": "BREAKING",
+        "location": "POST /items > request body"
+      },
+      {
+        "rule": "R29",
+        "severity": "BREAKING",
+        "location": "POST /items > response 201"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R29",
+        "severity": "BREAKING",
+        "location": "GET /items > response 200"
+      },
+      {
+        "rule": "R29",
+        "severity": "BREAKING",
+        "location": "POST /items > response 201"
+      },
+      {
+        "rule": "R29",
+        "severity": "WARNING",
+        "location": "POST /items > request body"
+      }
+    ]
+  },
+  "negative": {
+    "server": [
+      {
+        "rule": "R21",
+        "severity": "BREAKING",
+        "location": "GET /items > response 200.name"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R21",
+        "severity": "BREAKING",
+        "location": "GET /items > response 200.name"
+      }
+    ]
+  }
+}

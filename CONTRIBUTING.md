@@ -13,24 +13,24 @@ no virtualenv tooling, no `pip install` step, no build system.
 git clone https://github.com/hitender12/contractguard.git
 cd contractguard
 python3 --version        # must be 3.10 or newer
-python demo.py           # built-in demo on the fixtures; should exit 0
+python3 demo.py           # built-in demo on the fixtures; should exit 0
 ```
 
 That's the whole setup. The package lives in `contractguard/` and is run
 as a module:
 
 ```bash
-python -m contractguard check --base fixtures/breaking/base.yaml \
+python3 -m contractguard check --base fixtures/breaking/base.yaml \
                               --head fixtures/breaking/head.yaml
-python -m contractguard rules        # list all 27 rules (R01–R27)
-python -m contractguard demo         # demo fixtures, server profile
+python3 -m contractguard rules        # list all 31 rules (R01–R31)
+python3 -m contractguard demo         # demo fixtures, server profile
 ```
 
 ## Running the tests
 
 ```bash
-python -m unittest discover -s tests        # full suite (24 tests)
-python -m unittest tests.test_contractguard -v   # verbose, single module
+python3 -m unittest discover -s tests        # full suite (131 tests)
+python3 -m unittest tests.test_contractguard -v   # verbose, single module
 ```
 
 The suite is pure stdlib `unittest` — no pytest, no plugins. Keep it that
@@ -51,7 +51,7 @@ See `ARCHITECTURE.md` for the pipeline. The short version:
 | `contractguard/parser.py` | OpenAPI 3.x loading, local `$ref` resolution, `allOf` merging |
 | `contractguard/model.py` | Normalised contract model (`Contract`, `Operation`, `Schema`, …) |
 | `contractguard/diff.py` | Semantic diff — emits typed `Change` objects, never a severity |
-| `contractguard/rules.py` | The 27 compatibility rules (R01–R27) + server/client profiles |
+| `contractguard/rules.py` | The 31 compatibility rules (R01–R31) + server/client profiles |
 | `contractguard/policy.py` | CI policy: `fail_on` / `warn_on`, config file |
 | `contractguard/report.py` | Terminal / JSON / SARIF / Markdown renderers |
 | `contractguard/baseline.py` | Baseline from a file or a `git show <ref>:<path>` |
@@ -72,13 +72,15 @@ This is the most common contribution, and it has a fixed shape. See
    `both`). If the tool cannot confidently decide compatibility from the
    schema alone, the rule must return `UNKNOWN` — never guess.
 2. **Add a golden fixture pair first.** Create a new directory under
-   `fixtures/` (e.g. `fixtures/<name>/`) with `base.yaml`, `head.yaml`,
-   and `expected.json` pinning the exact `(rule, severity, location)` set
-   the pair must produce. The fixture comes before the implementation:
-   it is the specification of the rule. See "How to add a golden fixture
-   pair" below.
+   `fixtures/rules/` named `rNN-<slug>` (next free number after R31)
+   with `base.yaml`, `head.yaml`, `head_neg.yaml`, and `expected.json`
+   pinning the exact `(rule, severity, location)` set the pair must
+   produce under both profiles. The fixture comes before the
+   implementation: it is the specification of the rule. See "How to add
+   a golden fixture pair" below and `tests/test_rule_fixtures.py`, which
+   picks up every `fixtures/rules/rNN-*/` directory automatically.
 3. **Implement the rule in `contractguard/rules.py`.** Add a `_rNN`
-   function (next free number after R27), register it in the `RULES`
+   function (next free number after R31), register it in the `RULES`
    table with its name, direction, and server/client severities, and wire
    it into `classify()`. If the diff engine doesn't emit the change kind
    your rule needs, extend `contractguard/diff.py` first — rules consume
@@ -92,7 +94,7 @@ This is the most common contribution, and it has a fixed shape. See
    test that builds two tiny specs as text and asserts the classification
    under both profiles. Prefer this over fixture-only coverage: it makes
    the rule testable in isolation.
-6. **Run the full suite and `python -m contractguard rules`** and confirm
+6. **Run the full suite and `python3 -m contractguard rules`** and confirm
    the new rule appears with the right severities.
 
 A rule PR that changes an existing rule's severity is a breaking change
@@ -101,11 +103,17 @@ for users' CI — say so explicitly in the PR description and in the
 
 ## How to add a golden fixture pair
 
-Fixtures live in `fixtures/<category>/`, where `<category>` is one of
-`breaking`, `non-breaking`, or `ambiguous` (use `ambiguous` when the
-correct classification is `UNKNOWN`).
+There are two fixture formats. **New rules use the per-rule format:**
+`fixtures/rules/rNN-<slug>/`, with four files — `base.yaml`,
+`head.yaml`, `head_neg.yaml` (a change that must *not* trigger the
+rule), and `expected.json` with `positive` / `negative` sets under both
+`server` and `client` profiles. `tests/test_rule_fixtures.py` picks up
+every such directory automatically.
 
-Each fixture directory contains exactly three files:
+The older **demo fixtures** live in `fixtures/<category>/`, where
+`<category>` is one of `breaking`, `non-breaking`, or `ambiguous` (use
+`ambiguous` when the correct classification is `UNKNOWN`). Each demo
+fixture directory contains exactly three files:
 
 - `base.yaml` — the baseline OpenAPI spec (the "before").
 - `head.yaml` — the changed OpenAPI spec (the "after").
@@ -139,7 +147,7 @@ Rules for fixtures:
 To verify a new fixture by hand before wiring it into the tests:
 
 ```bash
-python -m contractguard check --base fixtures/<name>/base.yaml \
+python3 -m contractguard check --base fixtures/<name>/base.yaml \
                               --head fixtures/<name>/head.yaml --format json
 ```
 

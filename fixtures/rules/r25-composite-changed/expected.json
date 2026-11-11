@@ -1,0 +1,44 @@
+{
+  "positive": {
+    "server": [
+      {
+        "rule": "R25",
+        "severity": "UNKNOWN",
+        "location": "GET /items > response 200.metadata"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R25",
+        "severity": "UNKNOWN",
+        "location": "GET /items > response 200.metadata"
+      }
+    ]
+  },
+  "negative": {
+    "server": [
+      {
+        "rule": "R17",
+        "severity": "SAFE",
+        "location": "GET /items > response 200.count"
+      },
+      {
+        "rule": "R18",
+        "severity": "BREAKING",
+        "location": "GET /items > response 200.metadata"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R17",
+        "severity": "SAFE",
+        "location": "GET /items > response 200.count"
+      },
+      {
+        "rule": "R18",
+        "severity": "BREAKING",
+        "location": "GET /items > response 200.metadata"
+      }
+    ]
+  }
+}

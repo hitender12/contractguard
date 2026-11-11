@@ -1,0 +1,42 @@
+{
+  "positive": {
+    "server": [
+      {
+        "rule": "R31",
+        "severity": "SAFE",
+        "location": "GET /items > parameter q (query)"
+      },
+      {
+        "rule": "R31",
+        "severity": "SAFE",
+        "location": "POST /items"
+      },
+      {
+        "rule": "R31",
+        "severity": "WARNING",
+        "location": "GET /items"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R31",
+        "severity": "SAFE",
+        "location": "GET /items > parameter q (query)"
+      },
+      {
+        "rule": "R31",
+        "severity": "SAFE",
+        "location": "POST /items"
+      },
+      {
+        "rule": "R31",
+        "severity": "WARNING",
+        "location": "GET /items"
+      }
+    ]
+  },
+  "negative": {
+    "server": [],
+    "client": []
+  }
+}

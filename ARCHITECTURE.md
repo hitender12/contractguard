@@ -39,15 +39,16 @@ dataclasses. That separation is deliberate:
 
 | Module | Responsibility |
 |--------|---------------|
-| `yamlmini.py` | Dependency-free YAML-subset parser. Block maps/sequences, flow collections, quoted scalars, block scalars, comments. Rejects anchors/aliases/tags/multi-doc with a clear error. |
-| `parser.py` | JSON/YAML loading, OpenAPI 3.x validation, local `$ref` resolution (with cycle detection), `allOf` merging, path-level parameter inheritance. |
+| `yamlmini.py` | Dependency-free YAML-subset parser. Block maps/sequences, flow collections, quoted scalars, block scalars (including inside sequence items), comments, and a source-line map (`key_lines`). Rejects anchors/aliases/tags/multi-doc with a clear error. |
+| `parser.py` | JSON/YAML loading, OpenAPI 3.x validation, local `$ref` resolution (with cycle detection), `allOf` merging, path-level parameter inheritance. Threads the line map through so every model node records its source line (YAML specs only). |
 | `model.py` | Normalized contract model. Composite schemas (`anyOf`/`oneOf`/`not`) are recorded, not flattened. Unknown keywords are kept in `raw` so the diff can flag them UNKNOWN instead of dropping them. |
-| `diff.py` | Semantic diff. Emits typed `Change` objects (what changed, where) — never a severity. Picks comparable media types (prefers `application/json`). |
-| `rules.py` | 27 rules (R01–R27). Each maps a `Change` + profile to a `Finding` with severity, message, explanation, and rule link. Unknown change kinds become UNKNOWN findings, never silent. |
-| `policy.py` | CI policy: `fail_on` / `warn_on` severities, profile selection, YAML/JSON config file. Default: fail on BREAKING only. |
-| `report.py` | Terminal, JSON, SARIF 2.1.0, Markdown PR summary renderers. |
-| `baseline.py` | Baseline from a file or from `git show <ref>:<path>`. |
+| `diff.py` | Semantic diff. Emits typed `Change` objects (what changed, where) — never a severity. Picks comparable media types (prefers `application/json`) and reports media-type set changes, `securitySchemes` changes, `additionalProperties` changes, and `deprecated` flag changes. |
+| `rules.py` | 31 rules (R01–R31). Each maps a `Change` + profile to a `Finding` with severity, message, explanation, and rule link. Unknown change kinds become UNKNOWN findings, never silent. |
+| `policy.py` | CI policy: `fail_on` / `warn_on` severities, profile selection, YAML/JSON config file. Default: fail on BREAKING only; `warn_on` is honoured — a warned severity is marked `[WARN]`, counted in the policy summary, and does not fail the check; a severity in both lists fails (`fail_on` wins). |
+| `report.py` | Terminal, JSON, SARIF 2.1.0, Markdown PR summary renderers. SARIF locations use the real source line for YAML specs and omit `region` entirely when the line is unknown (JSON specs) instead of fabricating `startLine: 1`. |
+| `baseline.py` | Baseline from a file or from `git show <ref>:<path>`, optionally scoped to a repository directory with `repo=` (the CLI's `--repo` flag). |
 | `cli.py` | `check`, `rules`, `demo` subcommands. |
+| `action/action.yml` | Composite GitHub Action: installs the package, runs the check (JSON + Markdown), posts the Markdown report as a PR comment, and fails the job on a failing severity. |
 
 ## Key design decisions
 
@@ -63,8 +64,19 @@ dataclasses. That separation is deliberate:
   R19, R20, R23, R24-request). The rule table in `docs/rules.md` lists
   both severities for every rule.
 - **Golden fixtures as the contract.** `fixtures/*/expected.json` pins the
-  exact (rule, severity, location) set for each fixture pair. Adding a rule
-  means adding a fixture pair first.
+  exact (rule, severity, location) set for each fixture pair, and
+  `fixtures/rules/rNN-<slug>/` pins a positive and a negative pair for
+  every rule. Adding a rule means adding a fixture pair first.
+- **Line numbers travel with the change.** The YAML parser records the
+  source line of every mapping key and sequence item; the parser threads
+  those lines onto the model nodes, the diff copies them onto changes,
+  and SARIF reports them. When a line is not known (JSON specs), the
+  region is omitted rather than invented.
+- **Constraint keywords are parsed, not compared.** `minLength`,
+  `maximum` and friends are recognised as known JSON Schema keywords, so
+  they are not flagged by R28 — but their values are not yet compared, so
+  a tighter `minLength` currently produces no finding. That is a known
+  gap, not a silent pass: see the limitations in the README.
 - **Stateless and CI-friendly.** No database, no server, no network calls.
   The only external dependency is the `git` CLI, used only for git-ref
   baselines.
@@ -73,8 +85,11 @@ dataclasses. That separation is deliberate:
 
 Per the blueprint: Rust diff engine (`contract-model`, `openapi-parser`,
 `diff-engine`, `compatibility-rules`, `report`, `cli` crates), full OpenAPI
-parser via serde, GitHub Action (composite or TypeScript) that installs the
-binary, comments on PRs, and sets a required status check. Then GraphQL /
-Protobuf adapters, a public fixture corpus, and optional contract-test
+parser via serde, and a GitHub Action that installs the binary, comments
+on PRs, and sets a required status check. The composite action in
+`action/` already does the CI half of that in Python (install from the
+repo, run the check, comment, fail the job); the Rust port would swap
+the install step for a prebuilt binary. Then GraphQL / Protobuf
+adapters, a public fixture corpus, and optional contract-test
 generation. This Python package is the reference implementation those crates
 should match rule-for-rule.

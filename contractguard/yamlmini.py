@@ -209,17 +209,49 @@ class _Line:
 
 
 def _prepare_lines(source: str) -> list[_Line]:
+    """Split source into significant lines, rejecting multi-document streams.
+
+    A ``---`` document marker is only meaningful at column 0. A second
+    ``---`` after content (or any content after a ``...`` end marker) is a
+    multi-document stream, which this parser rejects with a clear error
+    instead of silently merging documents. An indented ``---`` (for
+    example inside a block scalar) is ordinary content, not a marker.
+    A leading ``---`` before any content is accepted as a document start.
+    """
     raw_lines = source.splitlines()
     lines: list[_Line] = []
+    seen_content = False
+    seen_end = False
     for idx, raw in enumerate(raw_lines, start=1):
-        if raw.strip() in ("", "---", "..."):
+        stripped = raw.strip()
+        if stripped == "":
             continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        if indent == 0 and stripped in ("---", "..."):
+            if stripped == "---":
+                if seen_content or seen_end:
+                    raise UnsupportedYAML(
+                        f"line {idx}: multi-document YAML streams are not "
+                        "supported; split the documents and check them "
+                        "one at a time"
+                    )
+                # Leading document-start marker: skip it.
+                continue
+            # "..." end marker.
+            seen_end = True
+            continue
+        if seen_end:
+            raise UnsupportedYAML(
+                f"line {idx}: content after the '...' document-end marker "
+                "starts a new document; multi-document YAML streams are "
+                "not supported"
+            )
         stripped = _strip_comment(raw)
         if not stripped.strip():
             continue
+        seen_content = True
         if "\t" in raw[: len(raw) - len(raw.lstrip())]:
             raise YAMLParseError(f"line {idx}: tabs are not allowed for indentation")
-        indent = len(raw) - len(raw.lstrip(" "))
         lines.append(_Line(indent, stripped.strip(), idx))
     return lines
 
@@ -228,11 +260,16 @@ class _Parser:
     def __init__(self, lines: list[_Line]):
         self.lines = lines
         self.pos = 0
+        # Maps a tuple path of mapping keys / sequence indexes to the
+        # source line where that key or item starts, e.g.
+        # ("paths", "/users", "get", "responses", "200") -> 14.
+        # Used for real SARIF line numbers; see parse_yaml_lines().
+        self.key_lines: dict[tuple, int] = {}
 
     def parse(self):
         if not self.lines:
             return None
-        value = self._parse_block(self.lines[0].indent)
+        value = self._parse_block(self.lines[0].indent, ())
         if self.pos < len(self.lines):
             line = self.lines[self.pos]
             raise YAMLParseError(
@@ -243,22 +280,22 @@ class _Parser:
     def _peek(self) -> _Line | None:
         return self.lines[self.pos] if self.pos < len(self.lines) else None
 
-    def _parse_block(self, indent: int):
+    def _parse_block(self, indent: int, path: tuple):
         line = self._peek()
         if line is None or line.indent < indent:
             return None
         if line.text.startswith("- ") or line.text == "-":
-            return self._parse_sequence(indent)
+            return self._parse_sequence(indent, path)
         if line.indent == indent:
             key, _, had_colon = _split_key_value(line.text)
             if had_colon:
-                return self._parse_mapping(indent)
+                return self._parse_mapping(indent, path)
         # A lone scalar (e.g. a document that is just a string, or a value
         # on its own line). Only valid at top level or as a sequence item.
         self.pos += 1
         return _parse_scalar(line.text)
 
-    def _parse_mapping(self, indent: int) -> dict:
+    def _parse_mapping(self, indent: int, path: tuple) -> dict:
         result: dict = {}
         while True:
             line = self._peek()
@@ -274,6 +311,7 @@ class _Parser:
             key = _parse_scalar(key)
             if isinstance(key, (dict, list)):
                 raise YAMLParseError(f"line {line.number}: complex keys are not supported")
+            self.key_lines[path + (key,)] = line.number
             self.pos += 1
             if value is not None:
                 if value in ("|", ">", "|-", ">-", "|+", ">+"):
@@ -290,10 +328,10 @@ class _Parser:
             if nxt is None or nxt.indent <= indent:
                 result[key] = None
             else:
-                result[key] = self._parse_block(nxt.indent)
+                result[key] = self._parse_block(nxt.indent, path + (key,))
         return result
 
-    def _parse_sequence(self, indent: int) -> list:
+    def _parse_sequence(self, indent: int, path: tuple) -> list:
         result: list = []
         while True:
             line = self._peek()
@@ -301,6 +339,8 @@ class _Parser:
                 return result
             if not (line.text.startswith("- ") or line.text == "-"):
                 return result
+            item_index = len(result)
+            self.key_lines[path + (item_index,)] = line.number
             item_text = line.text[1:].strip()
             self.pos += 1
             if item_text == "":
@@ -308,7 +348,7 @@ class _Parser:
                 if nxt is None or nxt.indent <= indent:
                     result.append(None)
                 else:
-                    result.append(self._parse_block(nxt.indent))
+                    result.append(self._parse_block(nxt.indent, path + (item_index,)))
                 continue
             # Inline content after "- ". It may start a mapping whose
             # remaining keys sit on lines indented relative to the dash.
@@ -317,12 +357,15 @@ class _Parser:
             if had_colon:
                 item: dict = {}
                 key = _parse_scalar(key)
+                self.key_lines[path + (item_index, key)] = line.number
                 if value is None:
                     nxt = self._peek()
                     if nxt is not None and nxt.indent > dash_col:
-                        item[key] = self._parse_block(nxt.indent)
+                        item[key] = self._parse_block(nxt.indent, path + (item_index, key))
                     else:
                         item[key] = None
+                elif value in ("|", ">", "|-", ">-", "|+", ">+"):
+                    item[key] = self._parse_block_scalar(dash_col, value)
                 else:
                     item[key] = _parse_scalar(value)
                 # Continuation keys of this map item: indented deeper
@@ -338,10 +381,13 @@ class _Parser:
                         break
                     self.pos += 1
                     k2 = _parse_scalar(k2)
-                    if v2 is None:
+                    self.key_lines[path + (item_index, k2)] = nxt.number
+                    if v2 in ("|", ">", "|-", ">-", "|+", ">+"):
+                        item[k2] = self._parse_block_scalar(nxt.indent, v2)
+                    elif v2 is None:
                         nxt2 = self._peek()
                         if nxt2 is not None and nxt2.indent > nxt.indent:
-                            item[k2] = self._parse_block(nxt2.indent)
+                            item[k2] = self._parse_block(nxt2.indent, path + (item_index, k2))
                         else:
                             item[k2] = None
                     else:
@@ -386,3 +432,17 @@ def parse_yaml(source: str):
     """
     lines = _prepare_lines(source)
     return _Parser(lines).parse()
+
+
+def parse_yaml_lines(source: str) -> dict[tuple, int]:
+    """Parse a YAML document and return a key-path -> line-number map.
+
+    Keys are tuples of mapping keys and sequence indexes, e.g.
+    ``("paths", "/users", "get", "responses", "200")`` maps to the line
+    where that key starts. Used to give SARIF findings real line numbers
+    instead of a fabricated ``startLine: 1``.
+    """
+    lines = _prepare_lines(source)
+    parser = _Parser(lines)
+    parser.parse()
+    return dict(parser.key_lines)

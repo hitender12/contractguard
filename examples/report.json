@@ -15,7 +15,8 @@
       "location": "GET /users > parameter limit (query)",
       "message": "request parameter limit (query) is now required",
       "explanation": "Server profile: existing callers that omit the parameter will be rejected. Client profile: the new client always sends it.",
-      "rule_url": "docs/rules.md#r09"
+      "rule_url": "docs/rules.md#r09",
+      "line": 10
     },
     {
       "rule": "R01",
@@ -23,7 +24,8 @@
       "location": "GET /users/{id}",
       "message": "GET /users/{id} removed",
       "explanation": "Existing clients calling this endpoint will get 404 / not-found errors. Removing an operation is the most direct breaking change.",
-      "rule_url": "docs/rules.md#r01"
+      "rule_url": "docs/rules.md#r01",
+      "line": 57
     },
     {
       "rule": "R21",
@@ -31,7 +33,8 @@
       "location": "POST /users > request body.email",
       "message": "request field `email` changed from string to integer",
       "explanation": "Consumers parse this value as the old type; a different type breaks deserialization, validation, and downstream logic.",
-      "rule_url": "docs/rules.md#r21"
+      "rule_url": "docs/rules.md#r21",
+      "line": 41
     },
     {
       "rule": "R17",
@@ -39,7 +42,8 @@
       "location": "POST /users > request body.region",
       "message": "new required request field `region`",
       "explanation": "Server profile: existing callers do not send this field and will be rejected. Client profile: older servers may reject an unknown required field under strict validation.",
-      "rule_url": "docs/rules.md#r17"
+      "rule_url": "docs/rules.md#r17",
+      "line": 43
     },
     {
       "rule": "R24",
@@ -47,7 +51,24 @@
       "location": "POST /users > response 201.role",
       "message": "response field `role` enum narrowed: removed 'user'",
       "explanation": "Values that existing clients or servers rely on are no longer valid.",
-      "rule_url": "docs/rules.md#r24"
+      "rule_url": "docs/rules.md#r24",
+      "line": 55
     }
-  ]
+  ],
+  "policy": {
+    "profile": "server",
+    "fail_on": [
+      "BREAKING"
+    ],
+    "warn_on": [
+      "WARNING",
+      "UNKNOWN"
+    ],
+    "outcomes": {
+      "fail": 5,
+      "warn": 0,
+      "pass": 0
+    },
+    "warnings": []
+  }
 }

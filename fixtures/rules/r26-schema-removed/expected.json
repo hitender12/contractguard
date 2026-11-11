@@ -1,0 +1,34 @@
+{
+  "positive": {
+    "server": [
+      {
+        "rule": "R26",
+        "severity": "BREAKING",
+        "location": "GET /items > parameter q (query)"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R26",
+        "severity": "BREAKING",
+        "location": "GET /items > parameter q (query)"
+      }
+    ]
+  },
+  "negative": {
+    "server": [
+      {
+        "rule": "R21",
+        "severity": "BREAKING",
+        "location": "GET /items > parameter q (query)"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R21",
+        "severity": "BREAKING",
+        "location": "GET /items > parameter q (query)"
+      }
+    ]
+  }
+}

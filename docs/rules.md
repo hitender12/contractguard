@@ -14,37 +14,45 @@ explains the reasoning.
 
 | Rule | Change | Direction | Server | Client |
 |------|--------|-----------|--------|--------|
-| R01 | operation removed | both | BREAKING | BREAKING |
-| R02 | operation added | both | SAFE | SAFE |
-| R03 | response status removed | response | BREAKING | BREAKING |
-| R04 | response status added | response | SAFE | SAFE |
-| R05 | new required request parameter | request | BREAKING | WARNING |
-| R06 | new optional request parameter | request | SAFE | SAFE |
-| R07 | required request parameter removed | request | SAFE | BREAKING |
-| R08 | optional request parameter removed | request | SAFE | SAFE |
-| R09 | parameter optional → required | request | BREAKING | SAFE |
-| R10 | parameter required → optional | request | SAFE | BREAKING |
-| R11 | parameter moved (query/header/path) | request | BREAKING | BREAKING |
-| R12 | new required request body | request | BREAKING | WARNING |
-| R13 | new optional request body | request | SAFE | SAFE |
-| R14 | request body removed | request | SAFE | BREAKING |
-| R15 | request body optional → required | request | BREAKING | SAFE |
-| R16 | request body required → optional | request | SAFE | BREAKING |
-| R17 | schema field added | both | depends | depends |
-| R18 | schema field removed | both | depends | depends |
-| R19 | schema field required → optional | both | depends | depends |
-| R20 | schema field optional → required | both | depends | depends |
-| R21 | schema type changed (e.g. string → integer) | both | BREAKING | BREAKING |
-| R22 | schema format changed | both | UNKNOWN | UNKNOWN |
-| R23 | schema nullability changed | both | depends | depends |
-| R24 | enum narrowed / widened | both | depends | depends |
-| R25 | anyOf / oneOf / not schema changed | both | UNKNOWN | UNKNOWN |
-| R26 | schema removed | both | BREAKING | BREAKING |
-| R27 | security requirement changed | both | WARNING | WARNING |
+| <a id="r01"></a>R01 | operation removed | both | BREAKING | BREAKING |
+| <a id="r02"></a>R02 | operation added | both | SAFE | SAFE |
+| <a id="r03"></a>R03 | response status removed | response | BREAKING | BREAKING |
+| <a id="r04"></a>R04 | response status added | response | SAFE | SAFE |
+| <a id="r05"></a>R05 | new required request parameter | request | BREAKING | WARNING |
+| <a id="r06"></a>R06 | new optional request parameter | request | SAFE | SAFE |
+| <a id="r07"></a>R07 | required request parameter removed | request | SAFE | BREAKING |
+| <a id="r08"></a>R08 | optional request parameter removed | request | SAFE | SAFE |
+| <a id="r09"></a>R09 | parameter optional → required | request | BREAKING | SAFE |
+| <a id="r10"></a>R10 | parameter required → optional | request | SAFE | BREAKING |
+| <a id="r11"></a>R11 | parameter moved (query/header/path) | request | BREAKING | BREAKING |
+| <a id="r12"></a>R12 | new required request body | request | BREAKING | WARNING |
+| <a id="r13"></a>R13 | new optional request body | request | SAFE | SAFE |
+| <a id="r14"></a>R14 | request body removed | request | SAFE | BREAKING |
+| <a id="r15"></a>R15 | request body optional → required | request | BREAKING | SAFE |
+| <a id="r16"></a>R16 | request body required → optional | request | SAFE | BREAKING |
+| <a id="r17"></a>R17 | schema field added | both | depends | depends |
+| <a id="r18"></a>R18 | schema field removed | both | depends | depends |
+| <a id="r19"></a>R19 | schema field required → optional | both | depends | depends |
+| <a id="r20"></a>R20 | schema field optional → required | both | depends | depends |
+| <a id="r21"></a>R21 | schema type changed (e.g. string → integer) | both | BREAKING | BREAKING |
+| <a id="r22"></a>R22 | schema format changed | both | UNKNOWN | UNKNOWN |
+| <a id="r23"></a>R23 | schema nullability changed | both | depends | depends |
+| <a id="r24"></a>R24 | enum narrowed / widened | both | depends | depends |
+| <a id="r25"></a>R25 | anyOf / oneOf / not schema changed | both | UNKNOWN | UNKNOWN |
+| <a id="r26"></a>R26 | schema removed | both | BREAKING | BREAKING |
+| <a id="r27"></a>R27 | security requirement / scheme changed | both | WARNING | SAFE* |
+| <a id="r28"></a>R28 | unknown schema keyword changed | both | UNKNOWN | UNKNOWN |
+| <a id="r29"></a>R29 | media type changed | both | depends | depends |
+| <a id="r30"></a>R30 | additionalProperties changed | both | depends | depends |
+| <a id="r31"></a>R31 | operation / parameter / schema deprecated | both | depends | depends |
+
+\* R27 is WARNING when a security requirement is added or a security
+scheme definition changes, and SAFE when a security requirement is
+removed.
 
 ## The rules that need the most care
 
-### R17 / R18 — adding and removing fields
+### <a id="r17"></a><a id="r18"></a>R17 / R18 — adding and removing fields
 
 - **Response field added, optional:** SAFE under both profiles. Old clients
   ignore unknown fields.
@@ -63,7 +71,7 @@ explains the reasoning.
   finding still explains the risk.
 - **Request field removed, was optional:** SAFE under both profiles.
 
-### R19 / R20 — required ↔ optional
+### <a id="r19"></a><a id="r20"></a>R19 / R20 — required ↔ optional
 
 - **Request field optional → required:** BREAKING (server) / SAFE (client).
 - **Request field required → optional:** SAFE (server) / BREAKING (client).
@@ -71,7 +79,7 @@ explains the reasoning.
   server may now omit a field clients read unconditionally.
 - **Response field optional → required:** SAFE (server) / WARNING (client).
 
-### R21 / R22 / R23 — type, format, nullability
+### <a id="r21"></a><a id="r22"></a><a id="r23"></a>R21 / R22 / R23 — type, format, nullability
 
 - **Type changed** (string → integer): BREAKING. Consumers parse the value
   as the old type.
@@ -84,7 +92,7 @@ explains the reasoning.
 - **Request field became nullable:** SAFE.
 - **Request field became non-nullable:** BREAKING (server) / SAFE (client).
 
-### R24 — enums
+### <a id="r24"></a>R24 — enums
 
 - **Narrowed** (values removed): BREAKING for the server profile and for
   responses under either profile. The one exception is a narrowed *request*
@@ -92,13 +100,56 @@ explains the reasoning.
   the old server still accepts.
 - **Widened** (values added): SAFE. Existing values remain valid.
 
-### R25 — composite schemas
+### <a id="r25"></a>R25 — composite schemas
 
 `anyOf` / `oneOf` / `not` changes are UNKNOWN. The allowed value set may
 have narrowed, but field-by-field comparison cannot tell which branch a
 consumer relies on. A human must review.
 
-### R27 — security
+### <a id="r27"></a>R27 — security
 
 Adding a security requirement is WARNING: clients without the new
-credentials will be rejected. Removing one is SAFE.
+credentials will be rejected. Removing one is SAFE. A change to a
+security *scheme* definition (for example an OAuth flow or scope) is
+WARNING: clients authenticating with the old definition may be rejected
+or may lose access to scopes they relied on.
+
+### <a id="r28"></a>R28 — unknown schema keywords
+
+A schema keyword ContractGuard does not understand (anything outside the
+standard JSON Schema / OpenAPI keyword set, such as a vendor extension
+`x-*`) changed value. The impact cannot be decided from the schema
+alone, so the finding is UNKNOWN and a human must review. Known
+keywords that ContractGuard does not compare yet (for example
+`minLength`) are a documented limitation, not unknown keywords.
+
+### <a id="r29"></a>R29 — media types
+
+A request or response body changed media type (for example
+`application/json` → `text/plain`) while the schema stayed the same.
+Schema comparison alone cannot see this, but clients parse the body as
+the old media type, so it breaks them.
+
+- **Response media type changed:** BREAKING under both profiles.
+- **Request media type changed:** BREAKING (server) / WARNING (client).
+
+### <a id="r30"></a>R30 — additionalProperties
+
+`additionalProperties` became more permissive (for example `false` →
+`true`, or `false` → a schema) or more restrictive (`true` → `false`).
+When both sides are schemas they are diffed recursively instead.
+
+- **More permissive, request:** SAFE (server) / WARNING (client).
+- **More permissive, response:** SAFE under both profiles.
+- **More restrictive, request:** BREAKING (server) / SAFE (client).
+- **More restrictive, response:** WARNING under both profiles.
+
+### <a id="r31"></a>R31 — deprecated
+
+An operation, parameter, or schema was marked `deprecated: true`, or
+un-deprecated.
+
+- **Newly deprecated:** WARNING under both profiles. Deprecation does
+  not break clients yet, but the item is scheduled for removal; clients
+  should migrate.
+- **Un-deprecated:** SAFE under both profiles.

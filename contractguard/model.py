@@ -29,6 +29,11 @@ class Schema:
     # diff can report it as UNKNOWN instead of silently dropping it.
     raw: dict = field(default_factory=dict)
     ref: str | None = None
+    # Whether the schema was marked deprecated in the spec.
+    deprecated: bool = False
+    # Source line (1-based) of the schema node in a YAML spec, when known.
+    # None for JSON specs and for schemas built programmatically.
+    line: int | None = None
 
     def is_empty(self) -> bool:
         return (
@@ -47,23 +52,27 @@ class Parameter:
     required: bool = False
     schema: Schema | None = None
     deprecated: bool = False
+    line: int | None = None
 
 
 @dataclass
 class MediaType:
     schema: Schema | None = None
+    line: int | None = None
 
 
 @dataclass
 class RequestBody:
     required: bool = False
     content: dict[str, MediaType] = field(default_factory=dict)
+    line: int | None = None
 
 
 @dataclass
 class Response:
     description: str = ""
     content: dict[str, MediaType] = field(default_factory=dict)
+    line: int | None = None
 
 
 @dataclass
@@ -77,6 +86,7 @@ class Operation:
     responses: dict[str, Response] = field(default_factory=dict)
     security: list | None = None
     deprecated: bool = False
+    line: int | None = None
 
     @property
     def key(self) -> tuple[str, str]:

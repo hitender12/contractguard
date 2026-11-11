@@ -491,27 +491,26 @@ class TestRulesParameters(unittest.TestCase):
             [("R10", "BREAKING")],
         )
 
-    def test_r11_parameter_moved_is_not_reported_as_r11(self):
-        """PINNED BUG: moving a parameter query -> header never emits R11.
+    def test_r11_parameter_moved_is_breaking(self):
+        """A parameter moved query -> header emits R11 BREAKING.
 
-        diff._diff_parameters keys parameters by (name, location), so a
-        move is seen as an optional-parameter removal (R08) plus an
-        optional-parameter addition (R06) -- both SAFE. A caller moving
-        `q` from query to header is therefore reported as safe when it
-        is in fact breaking. This test documents the current behaviour;
-        if the diff is fixed to emit parameter-location-changed, update
-        this test to expect [("R11", "BREAKING")].
+        Regression test for the audit finding B1: the diff used to key
+        parameters by (name, location), so a move was seen as an
+        optional-parameter removal (R08) plus an optional-parameter
+        addition (R06) -- both SAFE. Parameters are now matched by name,
+        so a location move emits parameter-location-changed (R11).
         """
         base = _get_with_param(_OPT_PARAM)
         head = _get_with_param(
             _OPT_PARAM.replace("in: query", "in: header")
         )
-        findings = _findings(base, head)
-        self.assertEqual(_pairs(findings, "R11"), [])
-        self.assertEqual(
-            sorted((f.rule_id, f.severity) for f in findings),
-            [("R06", "SAFE"), ("R08", "SAFE")],
-        )
+        for profile in ("server", "client"):
+            findings = _findings(base, head, profile)
+            self.assertEqual(_pairs(findings, "R11"), [("R11", "BREAKING")])
+            self.assertEqual(
+                sorted((f.rule_id, f.severity) for f in findings),
+                [("R11", "BREAKING")],
+            )
 
 
 class TestRulesRequestBody(unittest.TestCase):
@@ -784,12 +783,22 @@ class TestRulesSchemaSemantics(unittest.TestCase):
             _pairs(_findings(base, head), "R23"), [("R23", "SAFE")]
         )
 
-    def test_r23_request_becomes_nullable_warning(self):
+    def test_r23_request_becomes_nullable_safe(self):
+        """A request field becoming nullable is SAFE (docs/rules.md).
+
+        The server accepts null for the field, so existing callers that
+        send null keep working and callers that never send null are
+        unaffected. Regression test for audit finding B3: the rule used
+        to return WARNING for any field becoming nullable, in either
+        direction.
+        """
         base = _req_obj(_field("nick", "type: string", "nullable: false"))
         head = _req_obj(_field("nick", "type: string", "nullable: true"))
-        self.assertEqual(
-            _pairs(_findings(base, head), "R23"), [("R23", "WARNING")]
-        )
+        for profile in ("server", "client"):
+            self.assertEqual(
+                _pairs(_findings(base, head, profile), "R23"),
+                [("R23", "SAFE")],
+            )
 
     def test_r23_request_stops_being_nullable(self):
         base = _req_obj(_field("nick", "type: string", "nullable: true"))
@@ -939,18 +948,30 @@ class TestRulesSecurity(unittest.TestCase):
             _pairs(_findings(base, head), "R27"), [("R27", "SAFE")]
         )
 
-    def test_r27_security_scheme_swapped_reported_safe(self):
-        """PINNED QUIRK: _r27 only distinguishes added vs not-added.
+    def test_r27_security_scheme_swapped_is_warning(self):
+        """Swapping BearerAuth for ApiKeyAuth changes which credentials a
+        client needs, so it is WARNING.
 
-        Swapping BearerAuth for ApiKeyAuth changes which credentials a
-        client needs, yet it is reported SAFE because the base security
-        list was non-empty. If the rule is fixed to compare scheme sets,
-        update this test to expect WARNING.
+        Regression test for the audit finding B4 (related): the rule
+        used to only distinguish added vs not-added, so a swap from a
+        non-empty base was reported SAFE. It now compares requirement
+        sets, so added, removed, and swapped requirements are each
+        classified correctly.
         """
         base = self._secured("      security:\n        - BearerAuth: []\n")
         head = self._secured("      security:\n        - ApiKeyAuth: []\n")
         self.assertEqual(
-            _pairs(_findings(base, head), "R27"), [("R27", "SAFE")]
+            _pairs(_findings(base, head), "R27"), [("R27", "WARNING")]
+        )
+
+    def test_r27_security_requirement_added_to_nonempty_is_warning(self):
+        """Adding a second requirement to a non-empty list is WARNING."""
+        base = self._secured("      security:\n        - BearerAuth: []\n")
+        head = self._secured(
+            "      security:\n        - BearerAuth: []\n        - ApiKeyAuth: []\n"
+        )
+        self.assertEqual(
+            _pairs(_findings(base, head), "R27"), [("R27", "WARNING")]
         )
 
     def test_r27_global_security_added_warning(self):

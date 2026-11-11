@@ -1,0 +1,32 @@
+{
+  "positive": {
+    "server": [
+      {
+        "rule": "R27",
+        "severity": "SAFE",
+        "location": "POST /items"
+      },
+      {
+        "rule": "R27",
+        "severity": "WARNING",
+        "location": "GET /items"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R27",
+        "severity": "SAFE",
+        "location": "POST /items"
+      },
+      {
+        "rule": "R27",
+        "severity": "WARNING",
+        "location": "GET /items"
+      }
+    ]
+  },
+  "negative": {
+    "server": [],
+    "client": []
+  }
+}

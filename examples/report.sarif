@@ -96,7 +96,7 @@
                   "uri": "/home/hatch/workspace/github-projects/contractguard/fixtures/breaking/head.yaml"
                 },
                 "region": {
-                  "startLine": 1
+                  "startLine": 10
                 }
               }
             }
@@ -115,7 +115,7 @@
                   "uri": "/home/hatch/workspace/github-projects/contractguard/fixtures/breaking/head.yaml"
                 },
                 "region": {
-                  "startLine": 1
+                  "startLine": 57
                 }
               }
             }
@@ -134,7 +134,7 @@
                   "uri": "/home/hatch/workspace/github-projects/contractguard/fixtures/breaking/head.yaml"
                 },
                 "region": {
-                  "startLine": 1
+                  "startLine": 41
                 }
               }
             }
@@ -153,7 +153,7 @@
                   "uri": "/home/hatch/workspace/github-projects/contractguard/fixtures/breaking/head.yaml"
                 },
                 "region": {
-                  "startLine": 1
+                  "startLine": 43
                 }
               }
             }
@@ -172,7 +172,7 @@
                   "uri": "/home/hatch/workspace/github-projects/contractguard/fixtures/breaking/head.yaml"
                 },
                 "region": {
-                  "startLine": 1
+                  "startLine": 55
                 }
               }
             }

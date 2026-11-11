@@ -1,0 +1,34 @@
+{
+  "positive": {
+    "server": [
+      {
+        "rule": "R16",
+        "severity": "SAFE",
+        "location": "POST /items"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R16",
+        "severity": "BREAKING",
+        "location": "POST /items"
+      }
+    ]
+  },
+  "negative": {
+    "server": [
+      {
+        "rule": "R14",
+        "severity": "SAFE",
+        "location": "POST /items"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R14",
+        "severity": "BREAKING",
+        "location": "POST /items"
+      }
+    ]
+  }
+}

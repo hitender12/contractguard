@@ -6,8 +6,8 @@ the specification of the rule, and it comes before the implementation.
 
 ## Step 0 — Check the rule doesn't already exist
 
-Read `docs/rules.md` (the full rule table, R01–R27) and run
-`python -m contractguard rules`. Check whether your change is already
+Read `docs/rules.md` (the full rule table, R01–R31) and run
+`python3 -m contractguard rules`. Check whether your change is already
 covered, possibly under a different name. Also check open issues and PRs
 for a rule with the same idea.
 
@@ -30,26 +30,36 @@ spec pair first and get agreement before writing code.
 
 ## Step 1 — Add a golden fixture pair first
 
-Create a directory under `fixtures/` in the right category:
-
-- `fixtures/breaking/` — the change breaks compatibility.
-- `fixtures/non-breaking/` — the change is safe (or a warning).
-- `fixtures/ambiguous/` — the correct classification is `UNKNOWN`.
-
-Each fixture directory holds exactly three files:
+Create a directory under `fixtures/rules/`, named `rNN-<slug>` where
+`NN` is the next free rule number:
 
 - `base.yaml` — the baseline OpenAPI spec ("before").
-- `head.yaml` — the changed spec ("after").
-- `expected.json` — the pinned result:
+- `head.yaml` — the changed spec ("after") that must trigger the rule.
+- `head_neg.yaml` — a changed spec that must **not** trigger the rule
+  (the negative case: a change that looks similar but is safe).
+- `expected.json` — the pinned result, with positive and negative sets
+  under both profiles:
 
 ```json
 {
-  "profile": "server",
-  "findings": [
-    {"rule": "R28", "severity": "BREAKING", "location": "GET /users/{id}"}
-  ]
+  "positive": {
+    "server": [{"rule": "R32", "severity": "BREAKING", "location": "GET /users/{id}"}],
+    "client": [{"rule": "R32", "severity": "BREAKING", "location": "GET /users/{id}"}]
+  },
+  "negative": {
+    "server": [],
+    "client": []
+  }
 }
 ```
+
+`tests/test_rule_fixtures.py` picks up every `fixtures/rules/rNN-*/`
+directory automatically and asserts the exact (rule, severity,
+location) sets, so you do not have to wire the fixture into any test
+loop by hand. (The top-level `fixtures/breaking/`,
+`fixtures/non-breaking/` and `fixtures/ambiguous/` directories are the
+older demo fixtures — three files each, one profile — and are kept for
+the demo; new rules use the per-rule format above.)
 
 Guidelines:
 
@@ -68,8 +78,8 @@ Guidelines:
 Verify the fixture by hand before wiring it in:
 
 ```bash
-python -m contractguard check --base fixtures/<name>/base.yaml \
-                              --head fixtures/<name>/head.yaml --format json
+python3 -m contractguard check --base fixtures/rules/rNN-<slug>/base.yaml \
+                              --head fixtures/rules/rNN-<slug>/head.yaml --format json
 ```
 
 At this point the output will *not* match your `expected.json` — that's
@@ -94,7 +104,7 @@ If an existing change kind already covers your case, skip this step.
 
 ## Step 3 — Implement the rule in `contractguard/rules.py`
 
-1. Add a `_rNN` function, using the next free number after R27. Follow
+1. Add a `_rNN` function, using the next free number after R31. Follow
    the shape of the existing functions: it takes a `Change` and a
    `profile` and returns a `Finding` (or `None` when the change is not a
    compatibility event at all). The `Finding` needs:
@@ -105,7 +115,7 @@ If an existing change kind already covers your case, skip this step.
    - `explanation` — which client behaviour may break, and why
    - `change_kind` — from the change
 2. Register the rule in the `RULES` table with its name, direction, and
-   server/client severities. This table is what `python -m contractguard
+   server/client severities. This table is what `python3 -m contractguard
    rules` prints, so keep it accurate.
 3. Wire the rule into `classify()` so the change kind dispatches to your
    `_rNN` function.
@@ -125,15 +135,15 @@ any.
 
 Also add a golden-fixture test entry for the fixture from Step 1, if the
 existing fixture-test loop doesn't pick it up automatically — check how
-the current fixture tests enumerate `fixtures/*/` and follow that
-pattern.
+the current fixture tests enumerate `fixtures/rules/rNN-*/` (see
+`tests/test_rule_fixtures.py`) and follow that pattern.
 
 Then run the suite:
 
 ```bash
-python -m unittest discover -s tests
-python -m contractguard rules        # your rule appears, correct severities
-python demo.py                       # demo still passes
+python3 -m unittest discover -s tests
+python3 -m contractguard rules        # your rule appears, correct severities
+python3 demo.py                       # demo still passes
 ```
 
 ## Step 5 — Document the rule in `docs/rules.md`

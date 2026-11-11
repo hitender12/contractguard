@@ -1,0 +1,32 @@
+{
+  "positive": {
+    "server": [
+      {
+        "rule": "R30",
+        "severity": "SAFE",
+        "location": "POST /items > request body"
+      },
+      {
+        "rule": "R30",
+        "severity": "WARNING",
+        "location": "GET /items > response 200"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R30",
+        "severity": "WARNING",
+        "location": "GET /items > response 200"
+      },
+      {
+        "rule": "R30",
+        "severity": "WARNING",
+        "location": "POST /items > request body"
+      }
+    ]
+  },
+  "negative": {
+    "server": [],
+    "client": []
+  }
+}

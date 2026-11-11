@@ -26,7 +26,7 @@ from .model import (
     Response,
     Schema,
 )
-from .yamlmini import YAMLParseError, parse_yaml
+from .yamlmini import YAMLParseError, parse_yaml, parse_yaml_lines
 
 SUPPORTED_METHODS = ("get", "put", "post", "delete", "options", "head", "patch", "trace")
 
@@ -53,6 +53,22 @@ def load_spec_text(text: str, path: str = "<input>"):
         raise SpecError(f"{path}: {exc}") from exc
 
 
+def load_spec_with_lines(text: str, path: str = "<input>"):
+    """Parse a spec document, returning (document, key-path -> line map).
+
+    The line map is populated for YAML input (via ``parse_yaml_lines``)
+    and empty for JSON input, which carries no source lines. It is used
+    to give SARIF findings real line numbers.
+    """
+    stripped = text.lstrip()
+    if stripped.startswith("{"):
+        return load_spec_text(text, path), {}
+    try:
+        return parse_yaml(text), parse_yaml_lines(text)
+    except YAMLParseError as exc:
+        raise SpecError(f"{path}: {exc}") from exc
+
+
 def load_spec_file(path: str) -> dict:
     try:
         with open(path, "r", encoding="utf-8") as handle:
@@ -60,6 +76,13 @@ def load_spec_file(path: str) -> dict:
     except OSError as exc:
         raise SpecError(f"cannot read {path}: {exc}") from exc
     return load_spec_text(text, path)
+
+
+def _line(lines: dict | None, *keys) -> int | None:
+    """Look up the source line for a key path, or None when unknown."""
+    if not lines:
+        return None
+    return lines.get(tuple(keys))
 
 
 class _Resolver:
@@ -102,7 +125,8 @@ def _as_bool(value, default: bool = False) -> bool:
     return bool(value) if isinstance(value, bool) else default
 
 
-def _normalize_schema(node, resolver: _Resolver, depth: int = 0) -> Schema:
+def _normalize_schema(node, resolver: _Resolver, depth: int = 0,
+                      path: tuple = (), lines: dict | None = None) -> Schema:
     if depth > 25:
         raise RefError("schema nesting too deep (possible circular $ref)")
     if node is None:
@@ -114,7 +138,12 @@ def _normalize_schema(node, resolver: _Resolver, depth: int = 0) -> Schema:
     if not isinstance(node, dict):
         raise SpecError(f"$ref target must be an object, got {node!r}")
 
-    schema = Schema(ref=ref if isinstance(ref, str) else None, raw=dict(node))
+    schema = Schema(
+        ref=ref if isinstance(ref, str) else None,
+        raw=dict(node),
+        deprecated=_as_bool(node.get("deprecated"), False),
+        line=_line(lines, *path),
+    )
     schema.type = node.get("type")
     schema.format = node.get("format")
     schema.nullable = _as_bool(node.get("nullable"), False)
@@ -124,8 +153,8 @@ def _normalize_schema(node, resolver: _Resolver, depth: int = 0) -> Schema:
     # allOf: merge properties and required lists (the common OpenAPI idiom
     # for extending a base schema). Anything else in allOf is kept raw.
     if isinstance(node.get("allOf"), list):
-        for part in node["allOf"]:
-            sub = _normalize_schema(part, resolver, depth + 1)
+        for i, part in enumerate(node["allOf"]):
+            sub = _normalize_schema(part, resolver, depth + 1, path + ("allOf", i), lines)
             schema.properties.update(sub.properties)
             for req in sub.required:
                 if req not in schema.required:
@@ -144,38 +173,45 @@ def _normalize_schema(node, resolver: _Resolver, depth: int = 0) -> Schema:
     props = node.get("properties")
     if isinstance(props, dict):
         for name, sub in props.items():
-            schema.properties[name] = _normalize_schema(sub, resolver, depth + 1)
+            schema.properties[name] = _normalize_schema(
+                sub, resolver, depth + 1, path + ("properties", name), lines
+            )
     required = node.get("required")
     if isinstance(required, list):
         schema.required = [str(r) for r in required]
     if isinstance(node.get("items"), dict):
-        schema.items = _normalize_schema(node["items"], resolver, depth + 1)
+        schema.items = _normalize_schema(node["items"], resolver, depth + 1, path + ("items",), lines)
     if "additionalProperties" in node:
         ap = node["additionalProperties"]
         if isinstance(ap, bool):
             schema.additional_properties = ap
         elif isinstance(ap, dict):
-            schema.additional_properties = _normalize_schema(ap, resolver, depth + 1)
+            schema.additional_properties = _normalize_schema(
+                ap, resolver, depth + 1, path + ("additionalProperties",), lines
+            )
     return schema
 
 
-def _normalize_parameter(node, resolver: _Resolver) -> Parameter:
+def _normalize_parameter(node, resolver: _Resolver, path: tuple = (),
+                         lines: dict | None = None) -> Parameter:
     node = resolver.resolve(node)
     if not isinstance(node, dict):
         raise SpecError(f"parameter must be an object, got {node!r}")
     schema = None
     if isinstance(node.get("schema"), dict):
-        schema = _normalize_schema(node["schema"], resolver)
+        schema = _normalize_schema(node["schema"], resolver, 0, path + ("schema",), lines)
     return Parameter(
         name=str(node.get("name", "")),
         location=str(node.get("in", "")),
         required=_as_bool(node.get("required"), False),
         schema=schema,
         deprecated=_as_bool(node.get("deprecated"), False),
+        line=_line(lines, *path),
     )
 
 
-def _normalize_media(content, resolver: _Resolver) -> dict[str, MediaType]:
+def _normalize_media(content, resolver: _Resolver, path: tuple = (),
+                     lines: dict | None = None) -> dict[str, MediaType]:
     result: dict[str, MediaType] = {}
     if not isinstance(content, dict):
         return result
@@ -184,26 +220,37 @@ def _normalize_media(content, resolver: _Resolver) -> dict[str, MediaType]:
             continue
         schema = None
         if isinstance(body.get("schema"), dict):
-            schema = _normalize_schema(body["schema"], resolver)
-        result[str(media_type)] = MediaType(schema=schema)
+            schema = _normalize_schema(
+                body["schema"], resolver, 0, path + (media_type, "schema"), lines
+            )
+        result[str(media_type)] = MediaType(
+            schema=schema, line=_line(lines, *(path + (media_type,)))
+        )
     return result
 
 
-def _normalize_operation(method: str, path: str, node, resolver: _Resolver) -> Operation:
+def _normalize_operation(method: str, path: str, node, resolver: _Resolver,
+                         op_path: tuple = (), lines: dict | None = None) -> Operation:
     node = resolver.resolve(node)
     if not isinstance(node, dict):
         raise SpecError(f"operation {method} {path} must be an object")
     params: list[Parameter] = []
-    for raw in node.get("parameters", []) or []:
+    for i, raw in enumerate(node.get("parameters", []) or []):
         if isinstance(raw, dict):
-            params.append(_normalize_parameter(raw, resolver))
+            params.append(
+                _normalize_parameter(raw, resolver, op_path + ("parameters", i), lines)
+            )
     request_body = None
     if isinstance(node.get("requestBody"), dict):
         body = resolver.resolve(node["requestBody"])
         if isinstance(body, dict):
             request_body = RequestBody(
                 required=_as_bool(body.get("required"), False),
-                content=_normalize_media(body.get("content"), resolver),
+                content=_normalize_media(
+                    body.get("content"), resolver,
+                    op_path + ("requestBody", "content"), lines,
+                ),
+                line=_line(lines, *(op_path + ("requestBody",))),
             )
     responses: dict[str, Response] = {}
     raw_responses = node.get("responses", {}) or {}
@@ -216,7 +263,11 @@ def _normalize_operation(method: str, path: str, node, resolver: _Resolver) -> O
                 continue
             responses[str(status)] = Response(
                 description=str(resp.get("description", "")),
-                content=_normalize_media(resp.get("content"), resolver),
+                content=_normalize_media(
+                    resp.get("content"), resolver,
+                    op_path + ("responses", status, "content"), lines,
+                ),
+                line=_line(lines, *(op_path + ("responses", status))),
             )
     return Operation(
         method=method.upper(),
@@ -228,11 +279,18 @@ def _normalize_operation(method: str, path: str, node, resolver: _Resolver) -> O
         responses=responses,
         security=node.get("security"),
         deprecated=_as_bool(node.get("deprecated"), False),
+        line=_line(lines, *op_path),
     )
 
 
-def normalize_spec(doc, source_path: str | None = None) -> Contract:
-    """Normalize a parsed OpenAPI document into a Contract."""
+def normalize_spec(doc, source_path: str | None = None,
+                   lines: dict | None = None) -> Contract:
+    """Normalize a parsed OpenAPI document into a Contract.
+
+    ``lines`` is an optional key-path -> source-line map (from
+    ``load_spec_with_lines``); it is used only to attach real line
+    numbers to operations, parameters, and schemas for SARIF output.
+    """
     if not isinstance(doc, dict):
         raise SpecError("spec must be a mapping")
     version = doc.get("openapi")
@@ -264,13 +322,20 @@ def normalize_spec(doc, source_path: str | None = None) -> Contract:
             continue
         # Path-level parameters apply to every operation on the path.
         path_params = []
-        for raw in path_item.get("parameters", []) or []:
+        for i, raw in enumerate(path_item.get("parameters", []) or []):
             if isinstance(raw, dict):
-                path_params.append(_normalize_parameter(raw, resolver))
+                path_params.append(
+                    _normalize_parameter(
+                        raw, resolver, ("paths", path, "parameters", i), lines
+                    )
+                )
         for method in SUPPORTED_METHODS:
             if method not in path_item:
                 continue
-            op = _normalize_operation(method, path, path_item[method], resolver)
+            op_path = ("paths", path, method)
+            op = _normalize_operation(
+                method, path, path_item[method], resolver, op_path, lines
+            )
             # Merge path-level parameters not shadowed by the operation.
             seen = {(p.name, p.location) for p in op.parameters}
             for param in path_params:
@@ -281,8 +346,15 @@ def normalize_spec(doc, source_path: str | None = None) -> Contract:
 
 
 def parse_spec_text(text: str, source_path: str | None = None) -> Contract:
-    return normalize_spec(load_spec_text(text, source_path or "<input>"), source_path)
+    doc, lines = load_spec_with_lines(text, source_path or "<input>")
+    return normalize_spec(doc, source_path, lines)
 
 
 def parse_spec_file(path: str) -> Contract:
-    return normalize_spec(load_spec_file(path), path)
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            text = handle.read()
+    except OSError as exc:
+        raise SpecError(f"cannot read {path}: {exc}") from exc
+    doc, lines = load_spec_with_lines(text, path)
+    return normalize_spec(doc, path, lines)

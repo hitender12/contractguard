@@ -33,24 +33,30 @@ def spec_from_git(ref: str, path: str, repo: str | None = None):
     return result.stdout
 
 
-def load_base(*, base_file: str | None, base_ref: str | None, base_path: str | None):
-    """Load the baseline contract from a file or a git ref."""
+def load_base(*, base_file: str | None, base_ref: str | None,
+              base_path: str | None, repo: str | None = None):
+    """Load the baseline contract from a file or a git ref.
+
+    ``repo`` scopes ``git show`` to that repository directory; when
+    omitted, git runs in the current working directory.
+    """
     if base_file:
         return parse_spec_file(base_file), base_file
     if base_ref and base_path:
-        text = spec_from_git(base_ref, base_path)
+        text = spec_from_git(base_ref, base_path, repo=repo)
         return parse_spec_text(text, f"{base_ref}:{base_path}"), f"{base_ref}:{base_path}"
     raise SpecError(
         "no baseline given: pass --base <file> or --base-ref <ref> --base-path <path>"
     )
 
 
-def load_head(*, head_file: str | None, head_ref: str | None, head_path: str | None):
+def load_head(*, head_file: str | None, head_ref: str | None,
+              head_path: str | None, repo: str | None = None):
     """Load the head contract from a file or a git ref."""
     if head_file:
         return parse_spec_file(head_file), head_file
     if head_ref and head_path:
-        text = spec_from_git(head_ref, head_path)
+        text = spec_from_git(head_ref, head_path, repo=repo)
         return parse_spec_text(text, f"{head_ref}:{head_path}"), f"{head_ref}:{head_path}"
     raise SpecError(
         "no head given: pass --head <file> or --head-ref <ref> --head-path <path>"

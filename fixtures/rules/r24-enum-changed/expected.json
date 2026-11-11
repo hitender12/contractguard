@@ -1,0 +1,54 @@
+{
+  "positive": {
+    "server": [
+      {
+        "rule": "R24",
+        "severity": "BREAKING",
+        "location": "GET /items > response 200.count"
+      },
+      {
+        "rule": "R24",
+        "severity": "BREAKING",
+        "location": "POST /items > request body.note"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R24",
+        "severity": "BREAKING",
+        "location": "GET /items > response 200.count"
+      },
+      {
+        "rule": "R24",
+        "severity": "SAFE",
+        "location": "POST /items > request body.note"
+      }
+    ]
+  },
+  "negative": {
+    "server": [
+      {
+        "rule": "R24",
+        "severity": "SAFE",
+        "location": "GET /items > response 200.count"
+      },
+      {
+        "rule": "R24",
+        "severity": "SAFE",
+        "location": "POST /items > request body.note"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R24",
+        "severity": "SAFE",
+        "location": "GET /items > response 200.count"
+      },
+      {
+        "rule": "R24",
+        "severity": "SAFE",
+        "location": "POST /items > request body.note"
+      }
+    ]
+  }
+}

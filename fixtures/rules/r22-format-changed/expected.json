@@ -1,0 +1,34 @@
+{
+  "positive": {
+    "server": [
+      {
+        "rule": "R22",
+        "severity": "UNKNOWN",
+        "location": "GET /items > response 200.name"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R22",
+        "severity": "UNKNOWN",
+        "location": "GET /items > response 200.name"
+      }
+    ]
+  },
+  "negative": {
+    "server": [
+      {
+        "rule": "R21",
+        "severity": "BREAKING",
+        "location": "GET /items > response 200.name"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R21",
+        "severity": "BREAKING",
+        "location": "GET /items > response 200.name"
+      }
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "positive": {
+    "server": [
+      {
+        "rule": "R02",
+        "severity": "SAFE",
+        "location": "GET /gone"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R02",
+        "severity": "SAFE",
+        "location": "GET /gone"
+      }
+    ]
+  },
+  "negative": {
+    "server": [],
+    "client": []
+  }
+}

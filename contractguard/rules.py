@@ -8,7 +8,7 @@ Two profiles:
 
 Every rule documents its direction (request vs response) and its severity
 under each profile. When the tool cannot confidently determine
-compatibility it reports UNKNOWN instead of guessing -- see R21/R24.
+compatibility it reports UNKNOWN instead of guessing -- see R22/R25.
 """
 
 from __future__ import annotations
@@ -30,6 +30,11 @@ class Finding:
     explanation: str
     change_kind: str = ""
     rule_url: str = ""
+    # Source line (1-based) of the changed node in the head spec (or the
+    # base spec for removals), when known from a YAML input. None for
+    # JSON specs. SARIF uses it for a real region; it is omitted there
+    # when unknown rather than fabricated.
+    line: int | None = None
 
     def __post_init__(self):
         if not self.rule_url:
@@ -243,18 +248,22 @@ def _r17(change: Change, profile: str) -> Finding:
     required = bool(change.detail.get("required"))
     name = _field_name(change.location)
     if direction == "response":
+        if required:
+            return Finding(
+                "R17",
+                "SAFE" if profile == "server" else "WARNING",
+                change.location,
+                f"required response field `{name}` added",
+                "Server profile: the server now guarantees the field. "
+                "Client profile: a new client reading a required field "
+                "will fail against older servers that do not send it.",
+                change.kind,
+            )
         return Finding(
-            "R17",
-            "SAFE" if profile == "server" else "WARNING",
-            change.location,
-            f"{'required' if required else 'optional'} response field "
-            f"`{name}` added",
-            "Server profile: the server now sends more data; old clients "
-            "ignore unknown fields. Client profile: a new client reading a "
-            "required field will fail against older servers that do not "
-            "send it."
-            if required
-            else "Added response data does not affect existing clients.",
+            "R17", "SAFE", change.location,
+            f"optional response field `{name}` added",
+            "Added response data does not affect existing clients; old "
+            "clients ignore unknown fields.",
             change.kind,
         )
     if required:
@@ -390,9 +399,18 @@ def _r23(change: Change, profile: str) -> Finding:
     name = _field_name(change.location)
     base_nullable = bool(change.detail.get("base"))
     if base_nullable is False:  # became nullable
+        if direction == "request":
+            return Finding(
+                "R23", "SAFE", change.location,
+                f"request field `{name}` is now nullable",
+                "The server accepts null for this field, so existing "
+                "callers that send null keep working and callers that "
+                "never send null are unaffected.",
+                change.kind,
+            )
         return Finding(
             "R23", "WARNING", change.location,
-            f"{direction} field `{name}` is now nullable",
+            f"response field `{name}` is now nullable",
             "Strict clients that do not expect null can break. Lenient "
             "clients are unaffected.",
             change.kind,
@@ -465,22 +483,208 @@ def _r26(change: Change, profile: str) -> Finding:
 
 
 def _r27(change: Change, profile: str) -> Finding:
-    base = change.detail.get("base")
-    head = change.detail.get("head")
-    added = bool(head) and not bool(base)
+    base = change.detail.get("base") or []
+    head = change.detail.get("head") or []
+
+    def _req_set(reqs) -> set:
+        # Normalize each security requirement to (scheme, scopes) pairs
+        # so added / removed / swapped requirements are distinguished.
+        out: set = set()
+        for req in reqs:
+            if isinstance(req, dict):
+                for scheme, scopes in req.items():
+                    out.add((str(scheme), tuple(scopes or [])))
+        return out
+
+    base_set = _req_set(base)
+    head_set = _req_set(head)
+    added = sorted(head_set - base_set)
+    removed = sorted(base_set - head_set)
+    if added and removed:
+        return Finding(
+            "R27", "WARNING", change.location,
+            "security requirements changed (added: "
+            + ", ".join(f"{s} [{', '.join(sc)}]" if sc else s for s, sc in added)
+            + "; removed: "
+            + ", ".join(f"{s} [{', '.join(sc)}]" if sc else s for s, sc in removed)
+            + ")",
+            "Clients authenticated with the old requirements may be "
+            "rejected, and new requirements may need credentials they "
+            "do not have.",
+            change.kind,
+        )
     if added:
         return Finding(
             "R27", "WARNING", change.location,
-            "new security requirement added",
+            "new security requirement added ("
+            + ", ".join(f"{s} [{', '.join(sc)}]" if sc else s for s, sc in added)
+            + ")",
             "Clients without the new credentials will be rejected. "
             "Existing authenticated clients are unaffected if they already "
             "meet the requirement.",
             change.kind,
         )
+    if removed:
+        return Finding(
+            "R27", "SAFE", change.location,
+            "security requirement removed ("
+            + ", ".join(f"{s} [{', '.join(sc)}]" if sc else s for s, sc in removed)
+            + ")",
+            "Fewer credentials are required than before.",
+            change.kind,
+        )
+    # The lists differ but the requirement sets are identical (e.g. a
+    # reorder): no effective change.
     return Finding(
         "R27", "SAFE", change.location,
-        "security requirement removed",
-        "Fewer credentials are required than before.",
+        "security requirements reordered (no effective change)",
+        "The same schemes and scopes are required; only their order "
+        "changed.",
+        change.kind,
+    )
+
+
+def _r27_scheme(change: Change, profile: str) -> Finding:
+    added = change.detail.get("added") or []
+    removed = change.detail.get("removed") or []
+    changed = change.detail.get("changed") or []
+    parts = []
+    if added:
+        parts.append(f"added schemes: {', '.join(added)}")
+    if removed:
+        parts.append(f"removed schemes: {', '.join(removed)}")
+    if changed:
+        parts.append(f"changed schemes: {', '.join(changed)}")
+    return Finding(
+        "R27", "WARNING", change.location,
+        "security scheme changed (" + "; ".join(parts) + ")",
+        "A security scheme definition changed (for example an OAuth flow "
+        "or scope). Clients authenticating with the old definition may "
+        "be rejected or may lose access to scopes they relied on.",
+        change.kind,
+    )
+
+
+def _r28(change: Change, profile: str) -> Finding:
+    added = change.detail.get("added") or []
+    removed = change.detail.get("removed") or []
+    changed = change.detail.get("changed") or []
+    parts = []
+    if added:
+        parts.append(f"added unknown keywords: {', '.join(added)}")
+    if removed:
+        parts.append(f"removed unknown keywords: {', '.join(removed)}")
+    if changed:
+        parts.append(f"changed unknown keywords: {', '.join(changed)}")
+    return Finding(
+        "R28", "UNKNOWN", change.location,
+        f"schema at `{change.location}` has unknown keywords that changed "
+        f"({'; '.join(parts)})",
+        "The schema uses keywords ContractGuard does not understand, and "
+        "their values changed. Whether that breaks clients cannot be "
+        "decided from the schema alone; a human must review.",
+        change.kind,
+    )
+
+
+def _r29(change: Change, profile: str) -> Finding:
+    direction = _direction(change)
+    removed = change.detail.get("removed") or []
+    added = change.detail.get("added") or []
+    if direction == "response":
+        return Finding(
+            "R29", "BREAKING", change.location,
+            f"response media type changed "
+            f"({', '.join(removed) or 'none'} -> {', '.join(added) or 'none'})",
+            "Clients parse the response body as the old media type; a "
+            "different media type breaks deserialization.",
+            change.kind,
+        )
+    return Finding(
+        "R29",
+        "BREAKING" if profile == "server" else "WARNING",
+        change.location,
+        f"request media type changed "
+        f"({', '.join(removed) or 'none'} -> {', '.join(added) or 'none'})",
+        "Server profile: existing callers send the old media type and "
+        "will be rejected. Client profile: older servers may reject a "
+        "body in the new media type.",
+        change.kind,
+    )
+
+
+def _r30(change: Change, profile: str) -> Finding:
+    direction = _direction(change)
+    name = _field_name(change.location)
+    change_kind = change.detail.get("change")
+    base = change.detail.get("base")
+    head = change.detail.get("head")
+    if change_kind == "more-permissive":
+        if direction == "response":
+            return Finding(
+                "R30", "SAFE", change.location,
+                f"response field `{name}` additionalProperties became "
+                f"more permissive ({base} -> {head})",
+                "The server may send additional properties; old clients "
+                "ignore unknown fields.",
+                change.kind,
+            )
+        return Finding(
+            "R30",
+            "SAFE" if profile == "server" else "WARNING",
+            change.location,
+            f"request field `{name}` additionalProperties became "
+            f"more permissive ({base} -> {head})",
+            "Server profile: the server accepts more properties than "
+            "before. Client profile: a new client may send additional "
+            "properties that older servers reject.",
+            change.kind,
+        )
+    # more-restrictive
+    if direction == "response":
+        return Finding(
+            "R30", "WARNING", change.location,
+            f"response field `{name}` additionalProperties became "
+            f"more restrictive ({base} -> {head})",
+            "The server may stop sending additional properties that "
+            "clients read.",
+            change.kind,
+        )
+    return Finding(
+        "R30",
+        "BREAKING" if profile == "server" else "SAFE",
+        change.location,
+        f"request field `{name}` additionalProperties became "
+        f"more restrictive ({base} -> {head})",
+        "Server profile: existing callers that send additional "
+        "properties will be rejected. Client profile: the new client "
+        "never sends additional properties.",
+        change.kind,
+    )
+
+
+def _r31(change: Change, profile: str) -> Finding:
+    was_deprecated = bool(change.detail.get("base"))
+    what = {
+        "operation-deprecated-changed": f"operation `{change.location}`",
+        "parameter-deprecated-changed": (
+            f"parameter {change.location.split('parameter ')[-1]}"
+        ),
+        "schema-deprecated-changed": f"schema at `{change.location}`",
+    }.get(change.kind, f"`{change.location}`")
+    if not was_deprecated:  # newly deprecated
+        return Finding(
+            "R31", "WARNING", change.location,
+            f"{what} is now deprecated",
+            "Deprecation does not break clients yet, but the operation, "
+            "parameter, or field is scheduled for removal; clients "
+            "should migrate.",
+            change.kind,
+        )
+    return Finding(
+        "R31", "SAFE", change.location,
+        f"{what} is no longer deprecated",
+        "The deprecation notice was removed; nothing breaks.",
         change.kind,
     )
 
@@ -509,6 +713,13 @@ _HANDLERS = {
     "schema-removed": _r26,
     "security-changed": _r27,
     "global-security-changed": _r27,
+    "security-scheme-changed": _r27_scheme,
+    "schema-unknown-changed": _r28,
+    "media-type-changed": _r29,
+    "schema-additional-properties-changed": _r30,
+    "operation-deprecated-changed": _r31,
+    "parameter-deprecated-changed": _r31,
+    "schema-deprecated-changed": _r31,
 }
 
 # Human-readable rule catalog used by `contractguard rules` and docs.
@@ -565,8 +776,20 @@ RULES = [
      "An anyOf/oneOf/not schema changed; impact needs human review."),
     ("R26", "schema-removed", "both", "BREAKING", "BREAKING",
      "A schema disappeared from a parameter, body, or response."),
-    ("R27", "security-changed", "both", "WARNING", "WARNING",
-     "Authentication/authorization requirements changed."),
+    ("R27", "security-changed", "both", "WARNING", "SAFE",
+     "Authentication/authorization requirements changed (added is WARNING, "
+     "removed is SAFE); security scheme definitions changed (WARNING)."),
+    ("R28", "schema-unknown-changed", "both", "UNKNOWN", "UNKNOWN",
+     "A schema keyword ContractGuard does not understand changed value."),
+    ("R29", "media-type-changed", "both", "depends", "depends",
+     "A request/response media type changed (severity depends on "
+     "direction and profile)."),
+    ("R30", "schema-additional-properties-changed", "both", "depends",
+     "depends",
+     "additionalProperties became more permissive or more restrictive."),
+    ("R31", "deprecated-changed", "both", "depends", "depends",
+     "An operation, parameter, or schema was marked deprecated (WARNING) "
+     "or un-deprecated (SAFE)."),
 ]
 
 
@@ -585,10 +808,15 @@ def classify(changes: list[Change], profile: str = "server") -> list[Finding]:
                     "ContractGuard does not have a rule for this change kind. "
                     "Reported as unknown rather than guessed.",
                     change.kind,
+                    line=change.line,
                 )
             )
             continue
-        findings.append(handler(change, profile))
+        finding = handler(change, profile)
+        # Carry the change's source line through to the finding so
+        # reports (SARIF, JSON) can point at the real location.
+        finding.line = change.line
+        findings.append(finding)
     # Deterministic order: severity rank, then location, then rule.
     rank = {"BREAKING": 0, "UNKNOWN": 1, "WARNING": 2, "SAFE": 3}
     findings.sort(key=lambda f: (rank.get(f.severity, 9), f.location, f.rule_id))

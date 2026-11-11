@@ -10,6 +10,15 @@ config file:
     warn_on: [WARNING, UNKNOWN]
 
 or with ``--fail-on`` / ``--warn-on`` on the command line.
+
+Semantics:
+- A finding whose severity is in ``fail_on`` FAILS the check (exit 1).
+- A finding whose severity is in ``warn_on`` (and not in ``fail_on``) is
+  a WARNING: it is reported prominently in every report format and
+  counted in the policy summary, but it does not fail the check.
+- Anything else PASSES silently as far as the policy is concerned
+  (it is still listed in the findings).
+- ``fail_on`` wins on overlap: a severity in both lists fails.
 """
 
 from __future__ import annotations
@@ -39,8 +48,34 @@ class Policy:
         if self.profile not in ("server", "client"):
             raise ValueError(f"unknown profile {self.profile!r}")
 
+    def classify_finding(self, finding) -> str:
+        """Return "fail", "warn", or "pass" for one finding.
+
+        ``fail_on`` wins when a severity is listed in both ``fail_on``
+        and ``warn_on``.
+        """
+        if finding.severity in self.fail_on:
+            return "fail"
+        if finding.severity in self.warn_on:
+            return "warn"
+        return "pass"
+
     def fails(self, findings) -> bool:
         return any(f.severity in self.fail_on for f in findings)
+
+    def warns(self, findings) -> list:
+        """Findings that warn but do not fail: severity in warn_on only."""
+        return [
+            f for f in findings
+            if f.severity in self.warn_on and f.severity not in self.fail_on
+        ]
+
+    def summary_counts(self, findings) -> dict[str, int]:
+        """Count findings by policy outcome: {"fail": n, "warn": n, "pass": n}."""
+        counts = {"fail": 0, "warn": 0, "pass": 0}
+        for finding in findings:
+            counts[self.classify_finding(finding)] += 1
+        return counts
 
     def exit_code(self, findings) -> int:
         return 1 if self.fails(findings) else 0

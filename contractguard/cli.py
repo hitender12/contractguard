@@ -40,6 +40,9 @@ def _build_parser() -> argparse.ArgumentParser:
                        help="Git ref for the head (needs --head-path)")
     check.add_argument("--head-path", default=None,
                        help="Path of the head spec inside the git ref")
+    check.add_argument("--repo", default=None,
+                       help="Repository directory for git-ref baselines "
+                            "(git show runs with -C <repo>; default: cwd)")
     check.add_argument("--profile", choices=("server", "client"), default="server",
                        help="Compatibility profile (default: server)")
     check.add_argument("--policy", default=None,
@@ -82,23 +85,25 @@ def _run_check(args) -> int:
         return 2
     try:
         base, base_label = load_base(
-            base_file=args.base_file, base_ref=args.base_ref, base_path=args.base_path
+            base_file=args.base_file, base_ref=args.base_ref,
+            base_path=args.base_path, repo=args.repo,
         )
         head, head_label = load_head(
-            head_file=args.head_file, head_ref=args.head_ref, head_path=args.head_path
+            head_file=args.head_file, head_ref=args.head_ref,
+            head_path=args.head_path, repo=args.repo,
         )
     except SpecError as exc:
         print(f"contractguard: {exc}", file=sys.stderr)
         return 2
     findings = classify(diff_contracts(base, head), profile=policy.profile)
     if args.format == "json":
-        text = render_json(findings, base_label, head_label)
+        text = render_json(findings, base_label, head_label, policy=policy)
     elif args.format == "sarif":
         text = render_sarif(findings, base_label, head_label)
     elif args.format == "markdown":
-        text = render_markdown(findings, base_label, head_label)
+        text = render_markdown(findings, base_label, head_label, policy=policy)
     else:
-        text = render_terminal(findings, base_label, head_label)
+        text = render_terminal(findings, base_label, head_label, policy=policy)
     if args.output:
         with open(args.output, "w", encoding="utf-8") as handle:
             handle.write(text + "\n")

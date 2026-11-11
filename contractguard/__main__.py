@@ -1,4 +1,4 @@
-"""Entry point: `python -m contractguard`."""
+"""Entry point: `python3 -m contractguard`."""
 
 from .cli import main
 

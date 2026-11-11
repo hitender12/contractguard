@@ -1,0 +1,138 @@
+name: ContractGuard
+description: Catch breaking API changes before they reach production.
+author: ContractGuard
+
+# Composite action (run steps only -- composite actions cannot use
+# `uses:` steps, so Python and the `gh` CLI come from the runner image;
+# GitHub-hosted ubuntu runners ship both).
+#
+# Usage (in the repo whose API contract you want to guard):
+#
+#   jobs:
+#     contract:
+#       runs-on: ubuntu-latest
+#       permissions:
+#         contents: read
+#         pull-requests: write
+#       steps:
+#         - uses: actions/checkout@v4
+#           with:
+#             fetch-depth: 0
+#         - uses: hitender12/contractguard/action@v0.2.0
+#           with:
+#             base-ref: ${{ github.event.pull_request.base.sha }}
+#             base-path: api/openapi.yaml
+#             head-path: api/openapi.yaml
+#
+# The action installs ContractGuard from its own repository, runs the
+# check, posts the Markdown report as a PR comment, and fails the job
+# when the check finds a failing severity (BREAKING by default).
+
+inputs:
+  base:
+    description: Baseline spec file (used when base-ref is empty).
+    required: false
+    default: ""
+  head:
+    description: Head spec file.
+    required: false
+    default: api/openapi.yaml
+  base-ref:
+    description: Git ref for the baseline (needs base-path).
+    required: false
+    default: ""
+  base-path:
+    description: Path of the baseline spec inside the git ref.
+    required: false
+    default: ""
+  head-ref:
+    description: Git ref for the head (needs head-path).
+    required: false
+    default: ""
+  head-path:
+    description: Path of the head spec inside the git ref.
+    required: false
+    default: ""
+  profile:
+    description: Compatibility profile (server or client).
+    required: false
+    default: server
+  fail-on:
+    description: Space-separated severities that fail the check.
+    required: false
+    default: BREAKING
+  warn-on:
+    description: Space-separated severities reported as warnings.
+    required: false
+    default: WARNING UNKNOWN
+  comment:
+    description: Post the Markdown report as a PR comment (true/false).
+    required: false
+    default: "true"
+
+outputs:
+  exit-code:
+    description: Exit code of the contractguard check (1 = failing severity found).
+    value: ${{ steps.check.outputs.exit-code }}
+  breaking:
+    description: Number of BREAKING findings.
+    value: ${{ steps.check.outputs.breaking }}
+
+runs:
+  using: composite
+  steps:
+    - id: install
+      shell: bash
+      run: |
+        python3 -m pip install --quiet "$GITHUB_ACTION_PATH/.."
+        contractguard --version
+    - id: check
+      shell: bash
+      run: |
+        set +e
+        ARGS=(check --profile "${{ inputs.profile }}")
+        if [ -n "${{ inputs.base-ref }}" ]; then
+          ARGS+=(--base-ref "${{ inputs.base-ref }}" --base-path "${{ inputs.base-path }}")
+        else
+          ARGS+=(--base "${{ inputs.base }}")
+        fi
+        if [ -n "${{ inputs.head-ref }}" ]; then
+          ARGS+=(--head-ref "${{ inputs.head-ref }}" --head-path "${{ inputs.head-path }}")
+        else
+          ARGS+=(--head "${{ inputs.head }}")
+        fi
+        ARGS+=(--fail-on ${{ inputs.fail-on }} --warn-on ${{ inputs.warn-on }})
+        # Run twice: once for the machine-readable summary (exit code and
+        # breaking count), once for the Markdown PR comment. Both runs
+        # see the same specs, so they agree.
+        contractguard "${ARGS[@]}" --format json --output "$RUNNER_TEMP/contractguard-report.json"
+        CODE=$?
+        contractguard "${ARGS[@]}" --format markdown --output "$RUNNER_TEMP/contractguard-report.md"
+        BREAKING=$(python3 -c "import json; print(json.load(open('$RUNNER_TEMP/contractguard-report.json'))['summary']['BREAKING'])")
+        echo "exit-code=$CODE" >> "$GITHUB_OUTPUT"
+        echo "breaking=$BREAKING" >> "$GITHUB_OUTPUT"
+        echo "Check exit code: $CODE ($BREAKING breaking findings)"
+        exit 0
+    - id: comment
+      if: always() && inputs.comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        if [ -f "$RUNNER_TEMP/contractguard-report.md" ]; then
+          gh pr comment "${{ github.event.pull_request.number }}" \
+            --body-file "$RUNNER_TEMP/contractguard-report.md" \
+            --edit-last || \
+          gh pr comment "${{ github.event.pull_request.number }}" \
+            --body-file "$RUNNER_TEMP/contractguard-report.md"
+        fi
+    - id: gate
+      if: always()
+      shell: bash
+      run: |
+        CODE="${{ steps.check.outputs.exit-code }}"
+        if [ "$CODE" != "0" ]; then
+          echo "ContractGuard found failing changes (exit $CODE); failing the job."
+          exit "$CODE"
+        fi
+        echo "ContractGuard passed."

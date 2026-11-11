@@ -2,6 +2,8 @@
 
 Base: `/home/hatch/workspace/github-projects/contractguard/fixtures/breaking/base.yaml` → Head: `/home/hatch/workspace/github-projects/contractguard/fixtures/breaking/head.yaml`
 
+Policy: 5 fail, 0 warn, 0 pass (fail_on=['BREAKING'], warn_on=['WARNING', 'UNKNOWN'])
+
 | Severity | Count |
 |---|---|
 | BREAKING | 5 |

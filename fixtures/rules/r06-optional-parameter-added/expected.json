@@ -1,0 +1,34 @@
+{
+  "positive": {
+    "server": [
+      {
+        "rule": "R06",
+        "severity": "SAFE",
+        "location": "GET /items > parameter limit (query)"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R06",
+        "severity": "SAFE",
+        "location": "GET /items > parameter limit (query)"
+      }
+    ]
+  },
+  "negative": {
+    "server": [
+      {
+        "rule": "R05",
+        "severity": "BREAKING",
+        "location": "GET /items > parameter limit (query)"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R05",
+        "severity": "WARNING",
+        "location": "GET /items > parameter limit (query)"
+      }
+    ]
+  }
+}

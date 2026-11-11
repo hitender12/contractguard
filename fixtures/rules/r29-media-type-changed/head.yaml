@@ -1,0 +1,48 @@
+openapi: 3.0.3
+info:
+  title: Rule fixture
+  version: 1.0.0
+paths:
+  /items:
+    get:
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ok
+          content:
+            text/plain:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  count:
+                    type: integer
+    post:
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                note:
+                  type: string
+      responses:
+        '201':
+          description: created
+          content:
+            text/plain:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer

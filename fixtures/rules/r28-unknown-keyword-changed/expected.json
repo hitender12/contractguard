@@ -1,0 +1,22 @@
+{
+  "positive": {
+    "server": [
+      {
+        "rule": "R28",
+        "severity": "UNKNOWN",
+        "location": "GET /items > response 200"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R28",
+        "severity": "UNKNOWN",
+        "location": "GET /items > response 200"
+      }
+    ]
+  },
+  "negative": {
+    "server": [],
+    "client": []
+  }
+}
