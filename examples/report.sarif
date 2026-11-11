@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "ContractGuard",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/hitender12/contractguard",
+          "rules": [
+            {
+              "id": "R09",
+              "name": "R09",
+              "shortDescription": {
+                "text": "request parameter limit (query) is now required"
+              },
+              "fullDescription": {
+                "text": "Server profile: existing callers that omit the parameter will be rejected. Client profile: the new client always sends it."
+              },
+              "helpUri": "docs/rules.md#r09",
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "R01",
+              "name": "R01",
+              "shortDescription": {
+                "text": "GET /users/{id} removed"
+              },
+              "fullDescription": {
+                "text": "Existing clients calling this endpoint will get 404 / not-found errors. Removing an operation is the most direct breaking change."
+              },
+              "helpUri": "docs/rules.md#r01",
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "R21",
+              "name": "R21",
+              "shortDescription": {
+                "text": "request field `email` changed from string to integer"
+              },
+              "fullDescription": {
+                "text": "Consumers parse this value as the old type; a different type breaks deserialization, validation, and downstream logic."
+              },
+              "helpUri": "docs/rules.md#r21",
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "R17",
+              "name": "R17",
+              "shortDescription": {
+                "text": "new required request field `region`"
+              },
+              "fullDescription": {
+                "text": "Server profile: existing callers do not send this field and will be rejected. Client profile: older servers may reject an unknown required field under strict validation."
+              },
+              "helpUri": "docs/rules.md#r17",
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "R24",
+              "name": "R24",
+              "shortDescription": {
+                "text": "response field `role` enum narrowed: removed 'user'"
+              },
+              "fullDescription": {
+                "text": "Values that existing clients or servers rely on are no longer valid."
+              },
+              "helpUri": "docs/rules.md#r24",
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "R09",
+          "level": "error",
+          "message": {
+            "text": "BREAKING: request parameter limit (query) is now required (Server profile: existing callers that omit the parameter will be rejected. Client profile: the new client always sends it.)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/home/hatch/workspace/github-projects/contractguard/fixtures/breaking/head.yaml"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "R01",
+          "level": "error",
+          "message": {
+            "text": "BREAKING: GET /users/{id} removed (Existing clients calling this endpoint will get 404 / not-found errors. Removing an operation is the most direct breaking change.)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/home/hatch/workspace/github-projects/contractguard/fixtures/breaking/head.yaml"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "R21",
+          "level": "error",
+          "message": {
+            "text": "BREAKING: request field `email` changed from string to integer (Consumers parse this value as the old type; a different type breaks deserialization, validation, and downstream logic.)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/home/hatch/workspace/github-projects/contractguard/fixtures/breaking/head.yaml"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "R17",
+          "level": "error",
+          "message": {
+            "text": "BREAKING: new required request field `region` (Server profile: existing callers do not send this field and will be rejected. Client profile: older servers may reject an unknown required field under strict validation.)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/home/hatch/workspace/github-projects/contractguard/fixtures/breaking/head.yaml"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "R24",
+          "level": "error",
+          "message": {
+            "text": "BREAKING: response field `role` enum narrowed: removed 'user' (Values that existing clients or servers rely on are no longer valid.)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/home/hatch/workspace/github-projects/contractguard/fixtures/breaking/head.yaml"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

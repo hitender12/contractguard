@@ -1,0 +1,4 @@
+# Sample ContractGuard policy config
+profile: server
+fail_on: [BREAKING]
+warn_on: [WARNING, UNKNOWN]

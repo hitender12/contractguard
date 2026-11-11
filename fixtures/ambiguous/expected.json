@@ -1,0 +1,1 @@
+{"findings":[{"location":"POST /users > response 201.created_at","rule":"R22","severity":"UNKNOWN"},{"location":"POST /users > response 201.metadata","rule":"R25","severity":"UNKNOWN"}],"profile":"server"}

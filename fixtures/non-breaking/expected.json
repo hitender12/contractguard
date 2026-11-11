@@ -1,0 +1,1 @@
+{"findings":[{"location":"GET /users > parameter region (query)","rule":"R06","severity":"SAFE"},{"location":"GET /users/{id}/posts","rule":"R02","severity":"SAFE"},{"location":"POST /users > response 201.timezone","rule":"R17","severity":"SAFE"},{"location":"POST /users > response 201.role","rule":"R24","severity":"SAFE"}],"profile":"server"}
