@@ -22,7 +22,7 @@ as a module:
 ```bash
 python3 -m contractguard check --base fixtures/breaking/base.yaml \
                               --head fixtures/breaking/head.yaml
-python3 -m contractguard rules        # list all 31 rules (R01–R31)
+python3 -m contractguard rules        # list all 34 rules (R01–R34)
 python3 -m contractguard demo         # demo fixtures, server profile
 ```
 
@@ -51,7 +51,7 @@ See `ARCHITECTURE.md` for the pipeline. The short version:
 | `contractguard/parser.py` | OpenAPI 3.x loading, local `$ref` resolution, `allOf` merging |
 | `contractguard/model.py` | Normalised contract model (`Contract`, `Operation`, `Schema`, …) |
 | `contractguard/diff.py` | Semantic diff — emits typed `Change` objects, never a severity |
-| `contractguard/rules.py` | The 31 compatibility rules (R01–R31) + server/client profiles |
+| `contractguard/rules.py` | The 34 compatibility rules (R01–R34) + server/client profiles |
 | `contractguard/policy.py` | CI policy: `fail_on` / `warn_on`, config file |
 | `contractguard/report.py` | Terminal / JSON / SARIF / Markdown renderers |
 | `contractguard/baseline.py` | Baseline from a file or a `git show <ref>:<path>` |

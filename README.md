@@ -77,7 +77,7 @@ Or run it without installing:
 python3 demo.py                                   # built-in demo on the fixtures
 python3 -m contractguard check --base fixtures/breaking/base.yaml \
                                --head fixtures/breaking/head.yaml
-python3 -m contractguard rules                   # list all 31 rules
+python3 -m contractguard rules                   # list all 34 rules
 python3 -m unittest discover -s tests            # full test suite
 ```
 
@@ -150,7 +150,7 @@ jobs:
 
 ## Rules
 
-31 rules (R01–R31), each with a direction (request / response / both) and a
+34 rules (R01–R34), each with a direction (request / response / both) and a
 severity under each profile. Highlights:
 
 | Change | Server | Client |
@@ -184,17 +184,24 @@ for the demo:
 Each fixture ships an `expected.json`; the test suite asserts the exact
 (rule, severity, location) set produced.
 
-## Honest status (v0.2.0)
+## Honest status (v0.2.0 + unreleased round-2 fixes)
 
 What works: OpenAPI 3.x parsing (JSON + a dependency-free YAML-subset
-parser), local `$ref` resolution, `allOf` merging, semantic diff, 31
+parser), local `$ref` resolution, `allOf` merging, semantic diff, 34
 compatibility rules with server/client profiles, policy config
-(`fail_on` / `warn_on` both honoured), terminal / JSON / SARIF /
-Markdown reports, SARIF findings carry real source lines for YAML
-specs (omitted, never fabricated, when the line is unknown), git-ref
-baselines (with `--repo`), golden fixtures for every rule, and a
-composite GitHub Action under `action/` that comments on PRs and fails
-the job on BREAKING.
+(`fail_on` / `warn_on` both honoured, and `--fail-on` / `--warn-on`
+with an unknown severity are rejected with a clean exit 2 instead of
+silently disabling the gate), terminal / JSON / SARIF / Markdown
+reports, SARIF findings carry real source lines for YAML specs (omitted,
+never fabricated, when the line is unknown), git-ref baselines (with
+`--repo`), golden fixtures for every rule, and a composite GitHub Action
+under `action/` that comments on PRs and fails the job on BREAKING.
+Recursive schemas (a tree type referencing itself) parse without
+recursing forever; a change to a recursive reference is reported UNKNOWN
+(R34). `operationId` renames (R32) and top-level `servers` URL changes
+(R33) are compared. An enum reorder emits no finding, and duplicate YAML
+keys are rejected with a line number instead of silently keeping the
+last value.
 
 What is **not** built yet (see `ARCHITECTURE.md` for the production path):
 - **No Rust engine.** The blueprint specifies a Rust diff engine with a
@@ -204,7 +211,12 @@ What is **not** built yet (see `ARCHITECTURE.md` for the production path):
 - **No GraphQL / Protobuf / AsyncAPI** adapters (M6) — OpenAPI only.
 - **YAML subset parser limits:** anchors/aliases/tags, multi-document
   streams, and complex keys are rejected with a clear error. Real-world
-  specs using them need a full YAML library.
+  specs using them need a full YAML library. Duplicate mapping keys are
+  also rejected with a line number.
+- Recursive `$ref` chains are terminated at the recursive reference
+  (reported UNKNOWN by R34 if the reference changes); genuinely circular
+  `$ref`-only chains and schemas nested more than 25 levels deep are
+  still rejected with a clear error.
 - `anyOf` / `oneOf` / `not` changes are reported UNKNOWN by design.
 - Constraint keywords such as `minLength` / `maximum` are parsed but not
   yet compared; unknown keywords are reported UNKNOWN (R28).
@@ -218,7 +230,7 @@ contractguard/        # the package
   parser.py           # OpenAPI -> normalized contract model
   model.py            # normalized contract model
   diff.py             # semantic diff engine
-  rules.py            # 31 compatibility rules + profiles
+  rules.py            # 34 compatibility rules + profiles
   policy.py           # CI policy config
   report.py           # terminal / JSON / SARIF / Markdown
   baseline.py         # file or git-ref baselines

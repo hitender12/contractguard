@@ -29,6 +29,13 @@ class Schema:
     # diff can report it as UNKNOWN instead of silently dropping it.
     raw: dict = field(default_factory=dict)
     ref: str | None = None
+    # True when this schema is an unexpanded recursive reference: the
+    # parser hit a $ref that was already being expanded above it and
+    # stopped instead of recursing forever. The ref is kept so the diff
+    # can still report a change of reference (R34); the content is NOT
+    # expanded, so the diff must not compare it field-by-field against
+    # an expanded schema (that would report phantom additions/removals).
+    recursive_ref: bool = False
     # Whether the schema was marked deprecated in the spec.
     deprecated: bool = False
     # Source line (1-based) of the schema node in a YAML spec, when known.
@@ -103,6 +110,10 @@ class Contract:
     operations: dict[tuple[str, str], Operation] = field(default_factory=dict)
     security_schemes: dict = field(default_factory=dict)
     global_security: list | None = None
+    # Top-level `servers` URLs, in order (the first is the default).
+    # Only the URL strings are kept: descriptions and variables are not
+    # compared.
+    servers: list[str] = field(default_factory=list)
     source_path: str | None = None
 
     def operation_keys(self) -> list[tuple[str, str]]:

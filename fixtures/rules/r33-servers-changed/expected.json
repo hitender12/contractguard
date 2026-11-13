@@ -1,0 +1,34 @@
+{
+  "positive": {
+    "server": [
+      {
+        "rule": "R33",
+        "severity": "WARNING",
+        "location": "servers"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R33",
+        "severity": "WARNING",
+        "location": "servers"
+      }
+    ]
+  },
+  "negative": {
+    "server": [
+      {
+        "rule": "R33",
+        "severity": "SAFE",
+        "location": "servers"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R33",
+        "severity": "SAFE",
+        "location": "servers"
+      }
+    ]
+  }
+}

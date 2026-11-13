@@ -1,0 +1,34 @@
+{
+  "positive": {
+    "server": [
+      {
+        "rule": "R34",
+        "severity": "UNKNOWN",
+        "location": "GET /nodes > response 200.child"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R34",
+        "severity": "UNKNOWN",
+        "location": "GET /nodes > response 200.child"
+      }
+    ]
+  },
+  "negative": {
+    "server": [
+      {
+        "rule": "R17",
+        "severity": "SAFE",
+        "location": "GET /nodes > response 200.label"
+      }
+    ],
+    "client": [
+      {
+        "rule": "R17",
+        "severity": "SAFE",
+        "location": "GET /nodes > response 200.label"
+      }
+    ]
+  }
+}

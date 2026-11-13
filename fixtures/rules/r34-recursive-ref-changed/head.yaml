@@ -1,0 +1,28 @@
+openapi: 3.0.3
+info:
+  title: Rule fixture
+  version: 1.0.0
+paths:
+  /nodes:
+    get:
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+components:
+  schemas:
+    Node:
+      type: object
+      properties:
+        value:
+          type: string
+        child:
+          $ref: '#/components/schemas/OtherNode'
+    OtherNode:
+      type: object
+      properties:
+        value:
+          type: string

@@ -689,6 +689,94 @@ def _r31(change: Change, profile: str) -> Finding:
     )
 
 
+def _r32(change: Change, profile: str) -> Finding:
+    base = change.detail.get("base")
+    head = change.detail.get("head")
+    if base is None:  # operationId added where there was none
+        return Finding(
+            "R32", "SAFE", change.location,
+            f"operation `{change.location}` gained operationId `{head}`",
+            "Adding an operationId does not affect existing clients; "
+            "generated clients gain a new method name for the operation.",
+            change.kind,
+        )
+    if head is None:  # operationId removed
+        return Finding(
+            "R32", "WARNING", change.location,
+            f"operation `{change.location}` lost operationId `{base}`",
+            "Generated clients that call this operation by its operationId "
+            "will break. The wire contract (method + path) is unchanged.",
+            change.kind,
+        )
+    return Finding(
+        "R32", "WARNING", change.location,
+        f"operation `{change.location}` operationId changed "
+        f"`{base}` -> `{head}`",
+        "Generated clients that call this operation by its operationId "
+        "will break. The wire contract (method + path) is unchanged.",
+        change.kind,
+    )
+
+
+def _r33(change: Change, profile: str) -> Finding:
+    base = change.detail.get("base") or []
+    head = change.detail.get("head") or []
+    added = change.detail.get("added") or []
+    removed = change.detail.get("removed") or []
+    if removed:
+        return Finding(
+            "R33", "WARNING", change.location,
+            "server URL removed (" + ", ".join(removed) + ")",
+            "Clients configured with the removed server URL can no "
+            "longer reach the API.",
+            change.kind,
+        )
+    if base and head and base[0] != head[0]:
+        return Finding(
+            "R33", "WARNING", change.location,
+            f"default server changed ({base[0]} -> {head[0]})",
+            "The first entry in `servers` is the default; clients that "
+            "use the default URL will now talk to a different server.",
+            change.kind,
+        )
+    return Finding(
+        "R33", "SAFE", change.location,
+        "server URL added (" + ", ".join(added) + ")",
+        "Existing server URLs are unchanged; clients gain a new "
+        "endpoint they may use.",
+        change.kind,
+    )
+
+
+def _r34(change: Change, profile: str) -> Finding:
+    base = change.detail.get("base")
+    head = change.detail.get("head")
+    if base is None:
+        message = (
+            f"schema at `{change.location}` is now a recursive "
+            f"reference to `{head}` instead of an inline schema"
+        )
+    elif head is None:
+        message = (
+            f"schema at `{change.location}` is now an inline schema "
+            f"instead of a recursive reference to `{base}`"
+        )
+    else:
+        message = (
+            f"schema at `{change.location}` recursive reference changed "
+            f"`{base}` -> `{head}`"
+        )
+    return Finding(
+        "R34", "UNKNOWN", change.location,
+        message,
+        "The schema is recursive, so ContractGuard does not expand the "
+        "referenced schema at this position; whether the new target (or "
+        "the inline schema) is compatible cannot be decided from this "
+        "reference alone. Compare the two referenced schemas to decide.",
+        change.kind,
+    )
+
+
 _HANDLERS = {
     "operation-removed": _r01,
     "operation-added": _r02,
@@ -720,6 +808,9 @@ _HANDLERS = {
     "operation-deprecated-changed": _r31,
     "parameter-deprecated-changed": _r31,
     "schema-deprecated-changed": _r31,
+    "operation-id-changed": _r32,
+    "servers-changed": _r33,
+    "schema-ref-changed": _r34,
 }
 
 # Human-readable rule catalog used by `contractguard rules` and docs.
@@ -790,6 +881,14 @@ RULES = [
     ("R31", "deprecated-changed", "both", "depends", "depends",
      "An operation, parameter, or schema was marked deprecated (WARNING) "
      "or un-deprecated (SAFE)."),
+    ("R32", "operation-id-changed", "both", "depends", "depends",
+     "An operation's operationId was added (SAFE), renamed, or removed "
+     "(WARNING). The wire contract is unchanged; generated clients break."),
+    ("R33", "servers-changed", "both", "depends", "depends",
+     "A server URL was added (SAFE), removed, or the default server "
+     "changed (WARNING). Only URLs are compared."),
+    ("R34", "schema-ref-changed", "both", "UNKNOWN", "UNKNOWN",
+     "A recursive schema's $ref target changed; impact needs human review."),
 ]
 
 

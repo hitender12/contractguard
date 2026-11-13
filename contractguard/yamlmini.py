@@ -13,6 +13,10 @@ Deliberately NOT supported (raises UnsupportedYAML with a clear message):
 anchors/aliases (``&x`` / ``*x``), tags (``!!str``), multi-document streams,
 complex keys, merge keys. If a real-world spec needs them, use a full YAML
 library -- this parser exists so ContractGuard works with zero dependencies.
+
+Duplicate mapping keys are also rejected (``YAMLParseError``): for a
+correctness tool, silently keeping the last value could hide a real spec
+difference (for example a duplicated ``type:`` key).
 """
 
 from __future__ import annotations
@@ -119,7 +123,12 @@ def _parse_scalar(text: str):
                 if ":" not in part:
                     raise YAMLParseError(f"bad flow mapping entry: {part!r}")
                 key, _, value = part.partition(":")
-                result[_parse_scalar(key)] = _parse_scalar(value)
+                parsed_key = _parse_scalar(key)
+                if isinstance(parsed_key, (str, int, float, bool, type(None))) and parsed_key in result:
+                    raise YAMLParseError(
+                        f"duplicate key {parsed_key!r} in flow mapping"
+                    )
+                result[parsed_key] = _parse_scalar(value)
         return result
     if text.startswith("[") and text.endswith("]"):
         body = text[1:-1].strip()
@@ -311,6 +320,8 @@ class _Parser:
             key = _parse_scalar(key)
             if isinstance(key, (dict, list)):
                 raise YAMLParseError(f"line {line.number}: complex keys are not supported")
+            if key in result:
+                raise YAMLParseError(f"line {line.number}: duplicate key {key!r}")
             self.key_lines[path + (key,)] = line.number
             self.pos += 1
             if value is not None:
@@ -381,6 +392,10 @@ class _Parser:
                         break
                     self.pos += 1
                     k2 = _parse_scalar(k2)
+                    if k2 in item:
+                        raise YAMLParseError(
+                            f"line {nxt.number}: duplicate key {k2!r}"
+                        )
                     self.key_lines[path + (item_index, k2)] = nxt.number
                     if v2 in ("|", ">", "|-", ">-", "|+", ">+"):
                         item[k2] = self._parse_block_scalar(nxt.indent, v2)

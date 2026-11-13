@@ -179,10 +179,17 @@ class TestYamlEdgeCases(unittest.TestCase):
         with self.assertRaises(YAMLParseError):
             parse_yaml("a:\n  - - 1\n    - 2\n  - 3\n")
 
-    def test_duplicate_key_last_value_wins(self):
-        # Documented behaviour (not necessarily ideal): no error, the
-        # later value silently overwrites the earlier one.
-        self.assertEqual(parse_yaml("a: 1\na: 2\n"), {"a": 2})
+    def test_duplicate_key_rejected(self):
+        # Duplicate keys are rejected: silently keeping the last value
+        # could hide a real spec difference (for example a duplicated
+        # ``type:`` key). Applies to block mappings, sequence-item
+        # mappings, and flow mappings alike.
+        with self.assertRaises(YAMLParseError):
+            parse_yaml("a: 1\na: 2\n")
+        with self.assertRaises(YAMLParseError):
+            parse_yaml("a:\n  - name: x\n    name: y\n")
+        with self.assertRaises(YAMLParseError):
+            parse_yaml("a: {b: 1, b: 2}\n")
 
     def test_empty_spec_text_rejected(self):
         with self.assertRaises(SpecError):
@@ -845,21 +852,16 @@ class TestRulesSchemaSemantics(unittest.TestCase):
             [("R24", "SAFE")],
         )
 
-    def test_r24_enum_reordered_only_is_spuriously_flagged(self):
-        """PINNED QUIRK: reordering an enum with identical values is
-        flagged as R24 SAFE, not ignored.
-
-        diff compares enum lists in order, so [admin, user] vs
-        [user, admin] differs; with no values removed or added the rule
-        falls through to the "widened" branch with an empty added list
-        ("enum widened: added "). Harmless severity-wise (SAFE), but
-        noisy: a reorder-only PR gets a finding it should not.
-        """
+    def test_r24_enum_reordered_only_is_not_flagged(self):
+        """A pure enum reorder (same value set, different order) emits
+        no finding: enums are unordered sets of allowed values. (Round-2
+        fix N4: the diff used to emit a spurious R24 SAFE finding with
+        an empty "added" list.)"""
         base = _resp_obj(_field("role", "type: string", "enum: [admin, user]"))
         head = _resp_obj(_field("role", "type: string", "enum: [user, admin]"))
         findings = _findings(base, head)
-        self.assertEqual(_pairs(findings, "R24"), [("R24", "SAFE")])
-        self.assertEqual(len(findings), 1)
+        self.assertEqual(_pairs(findings, "R24"), [])
+        self.assertEqual(len(findings), 0)
 
     # R25: composite changed
     def test_r25_oneof_narrowing_unknown(self):

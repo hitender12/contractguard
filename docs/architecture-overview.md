@@ -70,7 +70,7 @@ change. Severity is a policy decision, made in the next stage.
 
 ## 4. Rules — `rules.py`, `policy.py`
 
-`rules.py` holds the 31 compatibility rules (R01–R31), documented in
+`rules.py` holds the 34 compatibility rules (R01–R34), documented in
 `docs/rules.md`. Each rule maps a `Change` plus a compatibility profile
 to a `Finding` with a severity, a message, an explanation of which
 client behaviour may break, and a link to its rule documentation.
@@ -118,5 +118,5 @@ network call anywhere in the pipeline.
 ## CLI — `cli.py`
 
 Three subcommands: `check` (compare head against baseline),
-`rules` (list all 31 rules), and `demo` (built-in demo on the fixtures).
+`rules` (list all 34 rules), and `demo` (built-in demo on the fixtures).
 Run `python3 -m contractguard --help` for the full flag list.

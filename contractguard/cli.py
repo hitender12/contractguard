@@ -70,10 +70,17 @@ def _load_policy(args) -> Policy:
         policy = Policy(profile=args.profile)
     if args.profile and not args.policy:
         policy.profile = args.profile
-    if args.fail_on is not None:
-        policy.fail_on = tuple(v.upper() for v in args.fail_on)
-    if args.warn_on is not None:
-        policy.warn_on = tuple(v.upper() for v in args.warn_on)
+    if args.fail_on is not None or args.warn_on is not None:
+        # Rebuild through the constructor so unknown severities are
+        # rejected (ValueError -> clean exit 2). Assigning to the
+        # dataclass fields directly would bypass Policy.__post_init__
+        # validation and silently disable the CI gate: --fail-on BOGUS
+        # would make every finding pass.
+        policy = Policy(
+            profile=policy.profile,
+            fail_on=tuple(args.fail_on) if args.fail_on is not None else policy.fail_on,
+            warn_on=tuple(args.warn_on) if args.warn_on is not None else policy.warn_on,
+        )
     return policy
 
 
@@ -105,8 +112,15 @@ def _run_check(args) -> int:
     else:
         text = render_terminal(findings, base_label, head_label, policy=policy)
     if args.output:
-        with open(args.output, "w", encoding="utf-8") as handle:
-            handle.write(text + "\n")
+        try:
+            with open(args.output, "w", encoding="utf-8") as handle:
+                handle.write(text + "\n")
+        except OSError as exc:
+            print(
+                f"contractguard: cannot write output file {args.output}: {exc}",
+                file=sys.stderr,
+            )
+            return 2
     else:
         print(text)
     return policy.exit_code(findings)

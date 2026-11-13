@@ -102,6 +102,31 @@ def _diff_schema(
         return
     assert base is not None and head is not None
 
+    # Recursive references are unexpanded markers (parser): their
+    # content is the referenced schema, already expanded at its first
+    # occurrence, so a content change to the target is caught there.
+    # Comparing a marker field-by-field against an expanded schema
+    # would report phantom additions/removals, so a marker is only
+    # ever compared by reference identity. A change of reference (or
+    # a reference replaced by an inline schema, or vice versa) is
+    # R34 UNKNOWN: whether the new target is compatible cannot be
+    # decided from the reference alone.
+    if base.recursive_ref or head.recursive_ref:
+        if base.ref != head.ref:
+            changes.append(
+                Change(
+                    "schema-ref-changed",
+                    location,
+                    {
+                        "direction": direction,
+                        "base": base.ref,
+                        "head": head.ref,
+                    },
+                    line=head.line or base.line,
+                )
+            )
+        return
+
     if base.composite is not None or head.composite is not None:
         if (base.composite or {}) != (head.composite or {}):
             changes.append(
@@ -175,9 +200,11 @@ def _diff_schema(
     if base.enum is not None or head.enum is not None:
         base_enum = list(base.enum or [])
         head_enum = list(head.enum or [])
-        if base_enum != head_enum:
-            removed = [v for v in base_enum if v not in head_enum]
-            added = [v for v in head_enum if v not in base_enum]
+        removed = [v for v in base_enum if v not in head_enum]
+        added = [v for v in head_enum if v not in base_enum]
+        # A pure reorder (same value set, different order) is not a
+        # change: enums are unordered sets of allowed values.
+        if removed or added:
             changes.append(
                 Change(
                     "schema-enum-changed",
@@ -428,6 +455,19 @@ def _diff_operation(
     location = f"{base.method} {base.path}"
     _diff_parameters(base, head, location, changes)
 
+    # operationId: the wire contract is unchanged by a rename, but
+    # generated clients call the operation by this name, so a rename or
+    # removal breaks them (R32). Adding one where there was none is safe.
+    if base.operation_id != head.operation_id:
+        changes.append(
+            Change(
+                "operation-id-changed",
+                location,
+                {"base": base.operation_id, "head": head.operation_id},
+                line=head.line or base.line,
+            )
+        )
+
     if base.deprecated != head.deprecated:
         changes.append(
             Change(
@@ -552,6 +592,26 @@ def diff_contracts(base: Contract, head: Contract) -> list[Change]:
                 "global-security-changed",
                 "security",
                 {"base": base.global_security, "head": head.global_security},
+            )
+        )
+
+    # Top-level servers: a removed URL (or a changed default, the first
+    # entry) breaks clients configured with it; adding a URL is safe.
+    # Only URLs are compared, in order; descriptions and variables are
+    # not stored in the model.
+    if (base.servers or []) != (head.servers or []):
+        base_servers = list(base.servers or [])
+        head_servers = list(head.servers or [])
+        changes.append(
+            Change(
+                "servers-changed",
+                "servers",
+                {
+                    "base": base_servers,
+                    "head": head_servers,
+                    "added": [u for u in head_servers if u not in base_servers],
+                    "removed": [u for u in base_servers if u not in head_servers],
+                },
             )
         )
 

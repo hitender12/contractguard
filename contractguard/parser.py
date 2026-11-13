@@ -8,7 +8,12 @@ Limits, stated plainly:
 - Only OpenAPI 3.x documents (``openapi: 3.*``). Swagger 2.0 is rejected
   with a clear error instead of being half-parsed.
 - Only local ``$ref`` targets. Remote / file / URL references are rejected.
-- Circular ``$ref`` chains are rejected instead of recursing forever.
+- Recursive ``$ref`` chains (for example a tree type whose ``child``
+  property references itself) are terminated at the recursive reference:
+  the reference is kept as an unexpanded marker (``Schema.recursive_ref``)
+  instead of recursing forever, so the diff can still report a change of
+  reference (R34). Genuinely circular ``$ref``-only chains and schemas
+  nested more than 25 levels deep are rejected with a clear error.
 - ``allOf`` is merged (properties + required union); ``anyOf`` / ``oneOf``
   are kept as composite schemas and flagged UNKNOWN by the diff engine.
 """
@@ -126,17 +131,38 @@ def _as_bool(value, default: bool = False) -> bool:
 
 
 def _normalize_schema(node, resolver: _Resolver, depth: int = 0,
-                      path: tuple = (), lines: dict | None = None) -> Schema:
+                      path: tuple = (), lines: dict | None = None,
+                      _active_refs: tuple[str, ...] = ()) -> Schema:
+    """Normalize one schema node.
+
+    ``_active_refs`` is the stack of ``$ref`` targets currently being
+    expanded above this node. A reference to a target already on the
+    stack is a recursive reference: return an unexpanded marker
+    (``recursive_ref=True``) instead of expanding it again, which
+    would recurse forever. A marker is safe to return because the
+    target's content is already expanded at its first occurrence, so a
+    change to the target is still caught there; the marker only has to
+    carry the reference identity. The depth guard remains as a backstop
+    for deeply nested inline schemas (no $ref involved).
+    """
     if depth > 25:
-        raise RefError("schema nesting too deep (possible circular $ref)")
+        raise RefError("schema nesting too deep (over 25 levels)")
     if node is None:
         return Schema()
     if not isinstance(node, dict):
         raise SpecError(f"schema must be an object, got {node!r}")
     ref = node.get("$ref")
+    if isinstance(ref, str) and ref in _active_refs:
+        return Schema(
+            ref=ref, raw=dict(node), recursive_ref=True,
+            line=_line(lines, *path),
+        )
     node = resolver.resolve(node)
     if not isinstance(node, dict):
         raise SpecError(f"$ref target must be an object, got {node!r}")
+    # This node's $ref (if any) is on the stack while its target's
+    # subtree is expanded, so a self-reference inside the target stops.
+    child_refs = _active_refs + ((ref,) if isinstance(ref, str) else ())
 
     schema = Schema(
         ref=ref if isinstance(ref, str) else None,
@@ -154,7 +180,7 @@ def _normalize_schema(node, resolver: _Resolver, depth: int = 0,
     # for extending a base schema). Anything else in allOf is kept raw.
     if isinstance(node.get("allOf"), list):
         for i, part in enumerate(node["allOf"]):
-            sub = _normalize_schema(part, resolver, depth + 1, path + ("allOf", i), lines)
+            sub = _normalize_schema(part, resolver, depth + 1, path + ("allOf", i), lines, child_refs)
             schema.properties.update(sub.properties)
             for req in sub.required:
                 if req not in schema.required:
@@ -174,20 +200,20 @@ def _normalize_schema(node, resolver: _Resolver, depth: int = 0,
     if isinstance(props, dict):
         for name, sub in props.items():
             schema.properties[name] = _normalize_schema(
-                sub, resolver, depth + 1, path + ("properties", name), lines
+                sub, resolver, depth + 1, path + ("properties", name), lines, child_refs
             )
     required = node.get("required")
     if isinstance(required, list):
         schema.required = [str(r) for r in required]
     if isinstance(node.get("items"), dict):
-        schema.items = _normalize_schema(node["items"], resolver, depth + 1, path + ("items",), lines)
+        schema.items = _normalize_schema(node["items"], resolver, depth + 1, path + ("items",), lines, child_refs)
     if "additionalProperties" in node:
         ap = node["additionalProperties"]
         if isinstance(ap, bool):
             schema.additional_properties = ap
         elif isinstance(ap, dict):
             schema.additional_properties = _normalize_schema(
-                ap, resolver, depth + 1, path + ("additionalProperties",), lines
+                ap, resolver, depth + 1, path + ("additionalProperties",), lines, child_refs
             )
     return schema
 
@@ -313,6 +339,16 @@ def normalize_spec(doc, source_path: str | None = None,
         if isinstance(schemes, dict):
             contract.security_schemes = schemes
     contract.global_security = doc.get("security")
+    # Top-level servers: only the URL strings are kept (descriptions and
+    # variables are not compared). A missing or malformed list means no
+    # servers, same as an empty list.
+    raw_servers = doc.get("servers")
+    if isinstance(raw_servers, list):
+        contract.servers = [
+            str(entry["url"])
+            for entry in raw_servers
+            if isinstance(entry, dict) and isinstance(entry.get("url"), str)
+        ]
 
     paths = doc.get("paths") or {}
     if not isinstance(paths, dict):

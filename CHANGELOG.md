@@ -9,6 +9,62 @@ to rule severities or output formats; those will be called out explicitly.
 
 ## [Unreleased]
 
+Round-2 audit fix release. A fresh independent re-audit confirmed all
+14 round-1 fixes held, and found 6 new issues (1 serious); every one
+is fixed below, each with a regression test in
+`tests/test_round2_fixes.py` or a golden fixture in `fixtures/rules/`.
+
+### Fixed
+
+- **N10b (serious) — `--fail-on` with an unknown severity silently
+  disabled the CI gate.** `cli._load_policy()` assigned to the
+  `Policy` dataclass fields directly, bypassing `__post_init__`
+  validation, so `--fail-on BOGUS` exited 0 on the breaking fixture
+  with `0 fail, 0 warn, 5 pass`. CLI-supplied severities are now
+  validated through the `Policy` constructor, like policy files: an
+  unknown severity is rejected with a clean exit 2
+  (`contractguard: policy error: unknown severities in fail_on: [...]`).
+  The same fix covers `--warn-on`.
+- **N4 — enum reorder produced a spurious finding.** Reordering an
+  enum emitted R24 SAFE `enum widened: added ` with an empty added
+  list. Enum comparison is now set-based: a pure reorder emits no
+  finding; narrowing and widening still fire R24 as before.
+- **N1b — recursive schemas were rejected and the limit was
+  undisclosed.** A self-referential schema (tree type with a `child`
+  property) failed the whole parse with `RefError: schema nesting too
+  deep`. The normalizer is now cycle-safe: a `$ref` to a schema
+  already being expanded becomes an unexpanded marker
+  (`Schema.recursive_ref`) instead of recursing forever, and the diff
+  compares markers by reference identity only (new rule R34 UNKNOWN
+  when the target changes) so no phantom field findings appear. A
+  content change to the referenced schema is still caught where it is
+  first expanded. Genuinely circular `$ref`-only chains and inline
+  nesting over 25 levels are still rejected with a clear error.
+- **N23 — duplicate YAML keys silently kept the last value.** A
+  duplicated key (for example `type:`) could hide a real spec
+  difference. Duplicate keys are now rejected with a line number in
+  block mappings, sequence-item mappings, and flow mappings.
+- **N18 — `--output` to an unwritable path printed a raw traceback
+  and exited 1.** The write failure is now a clean
+  `contractguard: cannot write output file ...` error with exit 2,
+  like every other input error.
+- **N6/N16 — `servers` and `operationId` were never compared and
+  undocumented.** Both are now compared: `operationId` renames and
+  removals are R32 WARNING (adding one is SAFE); top-level `servers`
+  URL removals and default-server changes are R33 WARNING (adding a
+  URL is SAFE). Only URL strings are compared, in order.
+
+### Added
+
+- Three new rules (R32–R34), each with a per-rule golden fixture:
+  `fixtures/rules/r32-operation-id-changed/`,
+  `fixtures/rules/r33-servers-changed/`,
+  `fixtures/rules/r34-recursive-ref-changed/`.
+- `docs/rules.md` documents R32–R34 and the enum-reorder rule; the
+  README "Honest status" and `ARCHITECTURE.md` now state the recursive
+  schema handling, the duplicate-key rejection, and the compared /
+  uncompared top-level scope.
+
 ## [0.2.0] — 2026-11-11
 
 Audit fix release. An independent QA audit found 14 broken or unverified

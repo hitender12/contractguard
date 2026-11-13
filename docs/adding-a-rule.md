@@ -6,7 +6,7 @@ the specification of the rule, and it comes before the implementation.
 
 ## Step 0 — Check the rule doesn't already exist
 
-Read `docs/rules.md` (the full rule table, R01–R31) and run
+Read `docs/rules.md` (the full rule table, R01–R34) and run
 `python3 -m contractguard rules`. Check whether your change is already
 covered, possibly under a different name. Also check open issues and PRs
 for a rule with the same idea.

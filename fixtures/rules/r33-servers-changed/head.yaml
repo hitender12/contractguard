@@ -1,0 +1,19 @@
+openapi: 3.0.3
+info:
+  title: Rule fixture
+  version: 1.0.0
+servers:
+  - url: https://api2.example.com
+paths:
+  /items:
+    get:
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string

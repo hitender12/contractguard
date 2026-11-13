@@ -1,4 +1,4 @@
-"""Golden fixtures for every rule R01-R31, positive and negative.
+"""Golden fixtures for every rule R01-R34, positive and negative.
 
 Each directory under fixtures/rules/ holds base.yaml, head.yaml (the
 change that must trigger the rule), head_neg.yaml (a closely related

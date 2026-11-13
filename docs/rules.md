@@ -45,6 +45,9 @@ explains the reasoning.
 | <a id="r29"></a>R29 | media type changed | both | depends | depends |
 | <a id="r30"></a>R30 | additionalProperties changed | both | depends | depends |
 | <a id="r31"></a>R31 | operation / parameter / schema deprecated | both | depends | depends |
+| <a id="r32"></a>R32 | operationId changed | both | depends | depends |
+| <a id="r33"></a>R33 | server URL changed | both | depends | depends |
+| <a id="r34"></a>R34 | recursive schema $ref target changed | both | UNKNOWN | UNKNOWN |
 
 \* R27 is WARNING when a security requirement is added or a security
 scheme definition changes, and SAFE when a security requirement is
@@ -99,6 +102,8 @@ removed.
   enum under the client profile (SAFE): the new client only sends values
   the old server still accepts.
 - **Widened** (values added): SAFE. Existing values remain valid.
+- **Reordered** (same value set, different order): no finding. Enums are
+  unordered sets of allowed values.
 
 ### <a id="r25"></a>R25 — composite schemas
 
@@ -153,3 +158,37 @@ un-deprecated.
   not break clients yet, but the item is scheduled for removal; clients
   should migrate.
 - **Un-deprecated:** SAFE under both profiles.
+
+### <a id="r32"></a>R32 — operationId
+
+An operation's `operationId` changed. The wire contract (method + path)
+is unchanged, so this is invisible to raw HTTP clients — but generated
+clients call the operation by its `operationId`, so a rename or removal
+breaks them.
+
+- **Renamed or removed:** WARNING under both profiles.
+- **Added where there was none:** SAFE under both profiles.
+
+### <a id="r33"></a>R33 — servers
+
+A top-level `servers` URL changed. Only the URL strings are compared,
+in order; descriptions and server variables are not compared.
+
+- **URL removed:** WARNING under both profiles. Clients configured with
+  the removed URL can no longer reach the API.
+- **Default server changed** (the first entry reordered): WARNING under
+  both profiles. Clients that use the default URL will now talk to a
+  different server.
+- **URL added:** SAFE under both profiles. Existing URLs are unchanged.
+
+### <a id="r34"></a>R34 — recursive schema reference
+
+A recursive schema's `$ref` target changed (or a recursive reference
+was replaced by an inline schema, or vice versa). Recursive schemas —
+for example a tree type whose `child` property references itself — are
+parsed without expanding the recursion (see the parser limits in the
+README), so the referenced schema is not compared at that position and
+the impact cannot be decided from the reference alone: UNKNOWN under
+both profiles, and a human must compare the two referenced schemas.
+A change to the referenced schema's *content* is still caught where
+the schema is first expanded.
